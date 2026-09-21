@@ -71,3 +71,6 @@ obj-$(CONFIG_KEYBOARD_TEGRA)		+= tegra-kbc.o
 obj-$(CONFIG_KEYBOARD_TM2_TOUCHKEY)	+= tm2-touchkey.o
 obj-$(CONFIG_KEYBOARD_TWL4030)		+= twl4030_keypad.o
 obj-$(CONFIG_KEYBOARD_XTKBD)		+= xtkbd.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_KEYBOARD_MTK_KPD)		+= mtk-kpd.o

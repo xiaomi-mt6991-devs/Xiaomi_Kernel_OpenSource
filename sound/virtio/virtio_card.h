@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
+ * Copyright (c) 2024 MediaTek Inc.
  * virtio-snd: Virtio sound device
  * Copyright (C) 2021 OpenSynergy GmbH
  */
@@ -13,11 +14,19 @@
 
 #include "virtio_ctl_msg.h"
 #include "virtio_pcm.h"
+#include "virtio_btcvsd.h"
+
+#if defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
+#include "../soc/mediatek/common/mtk-base-afe.h"
+#include "../soc/mediatek/common/mtk-sram-manager.h"
+#include "../soc/mediatek/common/mtk-mmap-ion.h"
+#endif
 
 #define VIRTIO_SND_CARD_DRIVER	"virtio-snd"
 #define VIRTIO_SND_CARD_NAME	"VirtIO SoundCard"
 #define VIRTIO_SND_PCM_NAME	"VirtIO PCM"
 
+struct dentry;
 struct virtio_jack;
 struct virtio_pcm_substream;
 
@@ -40,6 +49,7 @@ struct virtio_kctl {
 	struct snd_kcontrol *kctl;
 	struct virtio_snd_ctl_enum_item *items;
 };
+
 
 /**
  * struct virtio_snd - VirtIO sound card device.
@@ -72,10 +82,47 @@ struct virtio_snd {
 	u32 nsubstreams;
 	struct virtio_snd_chmap_info *chmaps;
 	u32 nchmaps;
+
 	struct virtio_snd_ctl_info *kctl_infos;
 	struct virtio_kctl *kctls;
 	u32 nkctls;
+
+#if defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
+	// void __iomem *base_addr;
+	// struct regmap *regmap;
+	struct resource res;
+	struct mtk_base_afe_irq *irqs;
+	int (*irq_fs)(struct snd_pcm_substream *substream,
+		      unsigned int rate);
+	int irqs_size;
+	void *sram;
+	struct virtio_kctl *remote_use_dram_only_ctl;
+	struct virtio_kctl *remote_sram_mode_ctl;
+	struct virtio_kctl *remote_passthrough_shm_ctl;
+	enum mtk_audio_sram_mode sram_mode;
+	struct work_struct sram_reg_control;
+	int result;
+#endif
+
+	struct virtsnd_btcvsd_snd *btcvsd;
+
+	struct dentry *debugfs;
 };
+
+#if defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
+#define VIRTIO_PASSTHROUGH_SHM_CMD_REG_DRAM 0
+#define VIRTIO_PASSTHROUGH_SHM_CMD_UNREG_DRAM 1
+#define VIRTIO_PASSTHROUGH_SHM_CMD_REG_SRAM 2
+#define VIRTIO_PASSTHROUGH_SHM_CMD_UNREG_SRAM 3
+
+struct virtio_passthrough_shm_msg {
+	uint8_t cmd;
+	uint8_t pcm_id;
+	uint8_t padding[6];
+	uint64_t pa;
+	uint64_t bytes;
+};
+#endif
 
 /* Message completion timeout in milliseconds (module parameter). */
 extern u32 virtsnd_msg_timeout_ms;
@@ -129,5 +176,18 @@ int virtsnd_kctl_parse_cfg(struct virtio_snd *snd);
 int virtsnd_kctl_build_devs(struct virtio_snd *snd);
 
 void virtsnd_kctl_event(struct virtio_snd *snd, struct virtio_snd_event *event);
+
+#if defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
+int virtsnd_kctl_find_by_name(struct virtio_snd *snd, const char *name,
+		struct virtio_kctl **out);
+int virtsnd_info_find_by_name(struct virtio_snd *snd, const char *name,
+		struct virtio_snd_ctl_info **out);
+int virtsnd_kctl_get_use_dram_only(struct virtio_snd *snd, int pcm_id);
+int virtsnd_kctl_reg_shm(struct virtio_snd *snd, int pcm_id,
+		dma_addr_t dma_area, size_t bytes, int sram);
+int virtsnd_kctl_unreg_shm(struct virtio_snd *snd, int pcm_id, int sram);
+int virtio_set_sram_mode(struct device *dev,
+				enum mtk_audio_sram_mode sram_mode);
+#endif
 
 #endif /* VIRTIO_SND_CARD_H */

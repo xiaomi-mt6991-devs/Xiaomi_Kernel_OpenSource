@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0 OR MIT */
+/*
+ * Copyright (c) 2020 MediaTek Inc.
+ */
 /*
  *
  * This header provides constants for the phy framework
@@ -20,8 +23,5 @@
 #define PHY_TYPE_XPCS		7
 #define PHY_TYPE_SGMII		8
 #define PHY_TYPE_QSGMII		9
-#define PHY_TYPE_DPHY		10
-#define PHY_TYPE_CPHY		11
-#define PHY_TYPE_USXGMII	12
 
 #endif /* _DT_BINDINGS_PHY */

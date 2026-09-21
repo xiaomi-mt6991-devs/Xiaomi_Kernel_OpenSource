@@ -13,9 +13,15 @@
 #include <linux/clocksource.h>
 #include <linux/interrupt.h>
 #include <linux/irqreturn.h>
+#include <linux/module.h>
+#include <linux/of_device.h>
+#include <linux/platform_device.h>
 #include <linux/sched_clock.h>
 #include <linux/slab.h>
 #include "timer-of.h"
+
+#define CREATE_TRACE_POINTS
+#include "timer-mediatek-trace.h"
 
 #define TIMER_CLK_EVT           (1)
 #define TIMER_CLK_SRC           (2)
@@ -70,7 +76,9 @@
 #define SYST_CON_IRQ_EN          BIT(1)
 #define SYST_CON_IRQ_CLR         BIT(4)
 
+//#ifndef MODULE
 static void __iomem *gpt_sched_reg __read_mostly;
+//#endif
 
 static void mtk_syst_ack_irq(struct timer_of *to)
 {
@@ -104,6 +112,8 @@ static int mtk_syst_clkevt_next_event(unsigned long ticks,
 	 */
 	writel(ticks, SYST_VAL_REG(to));
 
+	trace_timer_set_next_event(ticks);
+
 	/* Enable interrupt */
 	writel(SYST_CON_EN | SYST_CON_IRQ_EN, SYST_CON_REG(to));
 
@@ -131,6 +141,7 @@ static int mtk_syst_clkevt_oneshot(struct clock_event_device *clkevt)
 	return 0;
 }
 
+//#ifndef MODULE
 static u64 notrace mtk_gpt_read_sched_clock(void)
 {
 	return readl_relaxed(gpt_sched_reg);
@@ -179,6 +190,10 @@ static int mtk_gpt_clkevt_shutdown(struct clock_event_device *clk)
 
 	return 0;
 }
+static int mtk_gpt_clkevt_oneshot(struct clock_event_device *clk)
+{
+	return 0;
+}
 
 static int mtk_gpt_clkevt_set_periodic(struct clock_event_device *clk)
 {
@@ -220,9 +235,12 @@ __init mtk_gpt_setup(struct timer_of *to, u8 timer, u8 option)
 {
 	writel(GPT_CTRL_CLEAR | GPT_CTRL_DISABLE,
 	       timer_of_base(to) + GPT_CTRL_REG(timer));
-
-	writel(GPT_CLK_SRC(GPT_CLK_SRC_SYS13M) | GPT_CLK_DIV1,
-	       timer_of_base(to) + GPT_CLK_REG(timer));
+	if (timer == TIMER_CLK_SRC)
+		writel(GPT_CLK_SRC(GPT_CLK_SRC_SYS13M) | GPT_CLK_DIV1,
+			timer_of_base(to) + GPT_CLK_REG(timer));
+	if (timer == TIMER_CLK_EVT)
+		writel(GPT_CLK_SRC(GPT_CLK_SRC_RTC32K) | GPT_CLK_DIV1,
+			timer_of_base(to) + GPT_CLK_REG(timer));
 
 	writel(0x0, timer_of_base(to) + GPT_CMP_REG(timer));
 
@@ -266,6 +284,7 @@ static void mtk_gpt_suspend(struct clock_event_device *clk)
 	 */
 	writel(0x3f, timer_of_base(to) + GPT_IRQ_ACK_REG);
 }
+//#endif
 
 static struct timer_of to = {
 	.flags = TIMER_OF_IRQ | TIMER_OF_BASE | TIMER_OF_CLOCK,
@@ -302,6 +321,7 @@ static int __init mtk_syst_init(struct device_node *node)
 	return 0;
 }
 
+
 static int __init mtk_gpt_init(struct device_node *node)
 {
 	int ret;
@@ -309,7 +329,7 @@ static int __init mtk_gpt_init(struct device_node *node)
 	to.clkevt.features = CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT;
 	to.clkevt.set_state_shutdown = mtk_gpt_clkevt_shutdown;
 	to.clkevt.set_state_periodic = mtk_gpt_clkevt_set_periodic;
-	to.clkevt.set_state_oneshot = mtk_gpt_clkevt_shutdown;
+	to.clkevt.set_state_oneshot = mtk_gpt_clkevt_oneshot;
 	to.clkevt.tick_resume = mtk_gpt_clkevt_shutdown;
 	to.clkevt.set_next_event = mtk_gpt_clkevt_next_event;
 	to.clkevt.suspend = mtk_gpt_suspend;
@@ -329,7 +349,7 @@ static int __init mtk_gpt_init(struct device_node *node)
 	sched_clock_register(mtk_gpt_read_sched_clock, 32, timer_of_rate(&to));
 
 	/* Configure clock event */
-	mtk_gpt_setup(&to, TIMER_CLK_EVT, GPT_CTRL_OP_REPEAT);
+	mtk_gpt_setup(&to, TIMER_CLK_EVT, GPT_CTRL_OP_ONESHOT);
 	clockevents_config_and_register(&to.clkevt, timer_of_rate(&to),
 					TIMER_SYNC_TICKS, 0xffffffff);
 
@@ -337,5 +357,43 @@ static int __init mtk_gpt_init(struct device_node *node)
 
 	return 0;
 }
+
+
+#ifdef MODULE
+static int mtk_timer_probe(struct platform_device *pdev)
+{
+	int (*timer_init)(struct device_node *node);
+	struct device_node *np = pdev->dev.of_node;
+	timer_init = of_device_get_match_data(&pdev->dev);
+	return timer_init(np);
+}
+
+static const struct of_device_id mtk_timer_match_table[] = {
+
+	{
+		.compatible = "mediatek,mt6577-timer",
+		.data = mtk_gpt_init,
+	},
+
+	{
+		.compatible = "mediatek,mt6765-timer",
+		.data = mtk_syst_init,
+	},
+	{}
+};
+
+static struct platform_driver mtk_timer_driver = {
+	.probe = mtk_timer_probe,
+	.driver = {
+		.name = "mtk-timer",
+		.of_match_table = mtk_timer_match_table,
+	},
+};
+MODULE_DESCRIPTION("MEDIATEK Module Timer driver");
+MODULE_LICENSE("GPL v2");
+
+module_platform_driver(mtk_timer_driver);
+#else
 TIMER_OF_DECLARE(mtk_mt6577, "mediatek,mt6577-timer", mtk_gpt_init);
 TIMER_OF_DECLARE(mtk_mt6765, "mediatek,mt6765-timer", mtk_syst_init);
+#endif

@@ -503,3 +503,49 @@ config SPRD_IOMMU
 	  Say Y here if you want to use the multimedia devices listed above.
 
 endif # IOMMU_SUPPORT
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MTK_SMMU_V3_PMU
+	tristate "MediaTek SMMUV3 PMU Support"
+	depends on ARM_SMMU_V3
+
+	help
+	  Support for the SMMU v3 PMU on mediatek SOCs.
+
+
+config MTK_SMMU_V3_LMU
+	tristate "MediaTek SMMUV3 LMU Support"
+	depends on ARM_SMMU_V3
+
+	help
+	  Support for the SMMU v3 Latency Meter Unit on mediatek SOCs.
+	  LMU is used to get the information of how many cycles spent
+	  for masters or a particular master in the SMMU.
+
+
+config MTK_SMMU_V3_MPAM_MON
+	tristate "MediaTek SMMUV3 MPAM Resource Monitor Support"
+	depends on ARM_SMMU_V3
+
+	help
+	  Support for the SMMU v3 MPAM resource monitor on mediatek SOCs.
+	  MPAM resource monitor is used to monitor the cache storage usage
+	  in the SMMU TCU and TBUs.
+
+
+config MTK_IOMMU_ARM32
+	tristate "MTK IOMMU Support"
+	depends on ARM
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	select ARM_DMA_USE_IOMMU
+	select IOMMU_API
+	select IOMMU_IO_PGTABLE_ARMV7S
+	select MEMORY
+	select MTK_SMI
+	help
+	  it used for 32bit project.
+	  Support for the M4U on certain Mediatek SOCs. M4U is MultiMedia
+	  Memory Management Unit. This option enables remapping of DMA memory
+	  accesses for the multimedia subsystem.
+
+

@@ -1,3 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0
 # This file is intentionally empty. It's used as a placeholder for when
 # KCONFIG_EXT_PREFIX isn't defined.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config ALLOW_BUILTIN
+	bool "allow builtin drivers into kernel image"
+	help
+	  All modules are default built as kernel modules.
+	  Set ALLOW_BUILTIN=y to build modules
+	  into the kernel image.
+
+config FACTORY_BUILD
+	bool "distiguish factory version from dev version"
+	default n
+	help
+	  This macro will be defined when build factory version. It is used to
+	  distinguish factory and dev codes in kernel.
+

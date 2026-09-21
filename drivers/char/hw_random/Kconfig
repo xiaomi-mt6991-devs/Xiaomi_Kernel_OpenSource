@@ -590,3 +590,18 @@ config UML_RANDOM
 	  entropy pool.
 
 	  If unsure, say Y.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config HW_RANDOM_SECURE
+	tristate "Arm Security Random Number Generator support"
+	depends on HW_RANDOM
+	depends on HAVE_ARM_SMCCC || COMPILE_TEST
+	default HW_RANDOM
+	help
+	  This driver provides kernel-side support for the Arm Security
+	  Random Number Generator.
+
+	  To compile this driver as a module, choose M here. the
+	  module will be called sec-rng.
+
+

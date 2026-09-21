@@ -810,3 +810,11 @@ config KEYBOARD_CYPRESS_SF
 	  module will be called cypress-sf.
 
 endif
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config KEYBOARD_MTK_KPD
+	tristate "MediaTek Keypad Support"
+	depends on OF && HAVE_CLK
+	help
+	  Say Y here if you want to use the keypad on MediaTek SoCs.
+

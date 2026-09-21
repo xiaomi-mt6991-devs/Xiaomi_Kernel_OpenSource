@@ -1071,3 +1071,49 @@ config MMC_LITEX
 	  module will be called litex_mmc.
 
 	  If unsure, say N.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MMC_MTK_PRO
+	tristate "MediaTek SD/MMC Card Proprietary Interface support"
+	depends on !MMC_MTK
+	help
+	  This selects the MediaTek(R) Secure digital and Multimedia card
+	  Interface. If you have a machine with a integrated SD/MMC card
+	  reader, say Y or M here.
+
+
+config MMC_MTK_MMC_WP
+	tristate "MediaTek eMMC Write Protect Group support"
+	help
+	  Set read-only on the partitions belonging to eMMC write protect groups.
+
+config MMC_MTK_SW_CQHCI
+	tristate "Sofeware Command Queue Host Controller Interface support"
+	help
+		Some mmc host maybe not have CQHCI hardware.
+		This selects the Softeware Command Queue Host Controller Interface,
+		which will get better performance but will consume more CPU time.
+
+
+config MMC_MTK_SW_CQHCI_DEBUG
+	bool "SW CQHCI debugfor userdebug and eng load"
+	depends on MMC_MTK_SW_CQHCI
+	help
+		control SW CQHCI debug. Record more logs
+		for some seldom issue. It is only enabled
+		on userdebug and eng load.
+
+
+config MMC_CQHCI_DEBUG
+	tristate "Command Queue Host Controller Interface Debug"
+	depends on MMC_CQHCI
+	help
+	  This option enables debug support for the Command Queue Host
+	  Controller Interface (CQHCI) in MMC (MultiMediaCard) host devices.
+	  Enabling this option will allow you to obtain additional diagnostic
+	  information useful for developing or troubleshooting CQHCI
+	  implementations. This information is provided through debugfs and
+	  can include detailed command queue state, error logs, and other
+	  low-level operational details.
+
+

@@ -11,3 +11,8 @@ obj-$(CONFIG_LEDS_QCOM_FLASH)	+= leds-qcom-flash.o
 obj-$(CONFIG_LEDS_RT4505)	+= leds-rt4505.o
 obj-$(CONFIG_LEDS_RT8515)	+= leds-rt8515.o
 obj-$(CONFIG_LEDS_SGM3140)	+= leds-sgm3140.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_LEDS_MT6379)	+= leds-mt6379.o
+obj-$(CONFIG_LEDS_MT6379_PMIC)       += leds-mt6379pmic.o
+obj-$(CONFIG_DUAL_LEDS_MT6379_PMIC)       += dual-leds-mt6379pmic.o

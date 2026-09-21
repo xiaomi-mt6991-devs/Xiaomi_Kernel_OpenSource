@@ -1,26 +1,40 @@
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: GPL-2.0
 # OP-TEE Trusted Execution Environment Configuration
-config OPTEE
-	tristate "OP-TEE"
-	depends on HAVE_ARM_SMCCC
-	depends on MMU
+config MTK_OPTEE_SUPPORT
+	tristate "Enable OP-TEE Support"
 	help
-	  This implements the OP-TEE Trusted Execution Environment (TEE)
-	  driver.
+	  Enable OPTEE Support.
+	  This option enables OPTEE Driver which is used to communicate with
+	  TEE OS, for things like, setting up log buffers, interrupt pins,
+	  and IPC channels.
 
-config OPTEE_INSECURE_LOAD_IMAGE
-	bool "Load OP-TEE image as firmware"
+config OPTEE_REE_CONSOLE
+	bool "OP-TEE REE Console"
+	default y
+	depends on (MTK_OPTEE_SUPPORT) && (!OPTEE_RAMLOG)
+	help
+	  This implements the mechanism to accept log from OP-TEE
+	  RPC (Remote Procedure Call).
+	  Say Y if you would like to enable the mechanism.
+	  If unsure, say Y.
+
+config OPTEE_REE_CLK_CTRL
+	bool "OP-TEE REE Clock Control"
 	default n
-	depends on OPTEE && ARM64
+	depends on MTK_OPTEE_SUPPORT
 	help
-	  This loads the BL32 image for OP-TEE as firmware when the driver is
-	  probed. This returns -EPROBE_DEFER until the firmware is loadable from
-	  the filesystem which is determined by checking the system_state until
-	  it is in SYSTEM_RUNNING. This also requires enabling the corresponding
-	  option in Trusted Firmware for Arm. The documentation there explains
-	  the security threat associated with enabling this as well as
-	  mitigations at the firmware and platform level.
-	  https://trustedfirmware-a.readthedocs.io/en/latest/threat_model/threat_model.html
+	  This implements the mechanism to control clock by request from
+	  OP-TEE RPC.
+	  Say Y if you would like to enable this feature.
+	  If unsure, say N.
 
-	  Additional documentation on kernel security risks are at
-	  Documentation/staging/tee.rst.
+config OPTEE_RAMLOG
+	bool "OP-TEE RAMLOG"
+	default n
+	depends on MTK_OPTEE_SUPPORT
+	help
+	  It implements the mechanism to accept OP-TEE (Open Trusted
+	  Execution Environment) log from a share buffer between REE and
+	  TEE. OP-TEE OS put all logs into the share memory while a
+	  thread in REE kernel prints the log from share buffer as kernel
+	  log regularly.

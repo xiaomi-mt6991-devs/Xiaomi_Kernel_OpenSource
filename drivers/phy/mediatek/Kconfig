@@ -74,3 +74,39 @@ config PHY_MTK_DP
 	select GENERIC_PHY
 	help
 	  Support DisplayPort PHY for MediaTek SoCs.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config PHY_MTK_FPGAPHY
+	tristate "MediaTek FPGA-PHY Driver"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF
+	select GENERIC_PHY
+	help
+	  Enable this to support A60931/A60810 FPGA PHY.
+
+
+config PHY_MTK_NXP_EUSB2_REPEATER
+	tristate "MediaTek eUSB2 NXP Repeater Driver"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF && OF_ADDRESS
+	depends on HAS_IOMEM
+	select GENERIC_PHY
+	help
+	  EUSB2 need to add repeater to let USB2 worked.
+	  Enable support for the USB high-speed NXP eUSB2 repeater.
+	  Compare with Mediatek chips.
+	  Support tuning eUSB repeater signal.
+
+
+config PHY_MTK_MT6379_EUSB2_REPEATER
+	tristate "MediaTek eUSB2 MT6379 Repeater Driver"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on OF && OF_ADDRESS
+	depends on HAS_IOMEM
+	select GENERIC_PHY
+	help
+	  EUSB2 need to add repeater to let USB2 worked.
+	  Enable support for the USB high-speed MT6379 eUSB2 repeater.
+	  Compare with Mediatek chips.
+	  Support tuning eUSB repeater signal.
+

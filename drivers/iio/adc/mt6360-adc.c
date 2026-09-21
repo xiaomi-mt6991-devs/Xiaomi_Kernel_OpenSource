@@ -5,7 +5,6 @@
 #include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/ktime.h>
-#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
@@ -17,6 +16,7 @@
 #include <linux/iio/triggered_buffer.h>
 
 #include <asm/unaligned.h>
+#include <linux/mfd/mt6360-private.h>
 
 #define MT6360_REG_PMUCHGCTRL3	0x313
 #define MT6360_REG_PMUADCCFG	0x356
@@ -271,7 +271,7 @@ static irqreturn_t mt6360_adc_trigger_handler(int irq, void *p)
 	for_each_set_bit(bit, indio_dev->active_scan_mask, indio_dev->masklength) {
 		ret = mt6360_adc_read_channel(mad, bit, &val);
 		if (ret < 0) {
-			dev_warn(&indio_dev->dev, "Failed to get channel %d conversion val\n", bit);
+			dev_dbg(&indio_dev->dev, "Failed to get channel %d conversion val\n", bit);
 			goto out;
 		}
 
@@ -318,7 +318,7 @@ static int mt6360_adc_probe(struct platform_device *pdev)
 
 	regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!regmap) {
-		dev_err(&pdev->dev, "Failed to get parent regmap\n");
+		dev_dbg(&pdev->dev, "Failed to get parent regmap\n");
 		return -ENODEV;
 	}
 
@@ -333,7 +333,7 @@ static int mt6360_adc_probe(struct platform_device *pdev)
 
 	ret = mt6360_adc_reset(mad);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "Failed to reset adc\n");
+		dev_dbg(&pdev->dev, "Failed to reset adc\n");
 		return ret;
 	}
 
@@ -346,14 +346,14 @@ static int mt6360_adc_probe(struct platform_device *pdev)
 	ret = devm_iio_triggered_buffer_setup(&pdev->dev, indio_dev, NULL,
 					      mt6360_adc_trigger_handler, NULL);
 	if (ret) {
-		dev_err(&pdev->dev, "Failed to allocate iio trigger buffer\n");
+		dev_dbg(&pdev->dev, "Failed to allocate iio trigger buffer\n");
 		return ret;
 	}
 
 	return devm_iio_device_register(&pdev->dev, indio_dev);
 }
 
-static const struct of_device_id mt6360_adc_of_id[] = {
+static const struct of_device_id __maybe_unused mt6360_adc_of_id[] = {
 	{ .compatible = "mediatek,mt6360-adc", },
 	{}
 };
@@ -370,4 +370,4 @@ module_platform_driver(mt6360_adc_driver);
 
 MODULE_AUTHOR("Gene Chen <gene_chen@richtek.com>");
 MODULE_DESCRIPTION("MT6360 ADC Driver");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");

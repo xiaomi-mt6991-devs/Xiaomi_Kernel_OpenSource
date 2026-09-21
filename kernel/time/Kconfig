@@ -211,3 +211,12 @@ config CLOCKSOURCE_WATCHDOG_MAX_SKEW_US
 
 endmenu
 endif
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config ALARMTIMER_DEBUG
+	bool "Alarmtimer Debug"
+	help
+	  This kernel config can be used to debug RTC (Real-time Clock)
+          alarm not fire. When enable this option, we can get rtc alarm
+          time and currnet time.
+

@@ -1,9 +1,7 @@
-// SPDX-License-Identifier: GPL-2.0-only
-/*
- * Copyright (C) 2023 Richtek Technology Corp.
- *
- * Author: ChiYuan Huang <cy_huang@richtek.com>
- */
+// SPDX-License-Identifier: GPL-2.0
+//
+// Copyright (c) 2023 Mediatek Inc.
+// Author: ChiYuan Huang <cy_huang@richtek.com>
 
 #include <linux/i2c.h>
 #include <linux/kernel.h>
@@ -53,8 +51,7 @@ static int rt4803_set_mode(struct regulator_dev *rdev, unsigned int mode)
 
 	modeval <<= ffs(RT4803_MODE_MASK) - 1;
 
-	return regmap_update_bits(regmap, RT4803_REG_CONFIG, RT4803_MODE_MASK, modeval);
-}
+	return regmap_update_bits(regmap, RT4803_REG_CONFIG, RT4803_MODE_MASK, modeval); }
 
 static unsigned int rt4803_get_mode(struct regulator_dev *rdev)
 {
@@ -118,8 +115,7 @@ static int rt4803_set_suspend_voltage(struct regulator_dev *rdev, int uV)
 	vsel = (uV - rdev->desc->min_uV) / rdev->desc->uV_step;
 	vsel <<= ffs(RT4803_VSEL_MASK) - 1;
 
-	return regmap_update_bits(regmap, reg, RT4803_VSEL_MASK, vsel);
-}
+	return regmap_update_bits(regmap, reg, RT4803_VSEL_MASK, vsel); }
 
 static const struct regulator_ops rt4803_regulator_ops = {
 	.list_voltage = regulator_list_voltage_linear,

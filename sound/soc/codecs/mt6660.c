@@ -13,6 +13,7 @@
 #include <sound/pcm_params.h>
 
 #include "mt6660.h"
+#include <mtk-sp-spk-amp.h>
 
 struct reg_size_table {
 	u32 addr;
@@ -47,12 +48,13 @@ static int mt6660_reg_write(void *context, unsigned int reg, unsigned int val)
 	struct mt6660_chip *chip = context;
 	int size = mt6660_get_reg_size(reg);
 	u8 reg_data[4];
-	int i;
+	int i, ret;
 
 	for (i = 0; i < size; i++)
 		reg_data[size - i - 1] = (val >> (8 * i)) & 0xff;
 
-	return i2c_smbus_write_i2c_block_data(chip->i2c, reg, size, reg_data);
+	ret = i2c_smbus_write_i2c_block_data(chip->i2c, reg, size, reg_data);
+	return ret;
 }
 
 static int mt6660_reg_read(void *context, unsigned int reg, unsigned int *val)
@@ -323,7 +325,6 @@ static const struct snd_soc_component_driver mt6660_component_driver = {
 	.num_dapm_routes = ARRAY_SIZE(mt6660_component_dapm_routes),
 
 	.idle_bias_on = false, /* idle_bias_off = true */
-	.endianness = 1,
 };
 
 static int mt6660_component_aif_hw_params(struct snd_pcm_substream *substream,
@@ -457,9 +458,10 @@ static int _mt6660_read_chip_revision(struct mt6660_chip *chip)
 	return 0;
 }
 
-static int mt6660_i2c_probe(struct i2c_client *client)
+int mt6660_i2c_probe(struct i2c_client *client)
 {
 	struct mt6660_chip *chip = NULL;
+	static int dev_cnt;
 	int ret;
 
 	dev_dbg(&client->dev, "%s\n", __func__);
@@ -468,6 +470,7 @@ static int mt6660_i2c_probe(struct i2c_client *client)
 		return -ENOMEM;
 	chip->i2c = client;
 	chip->dev = &client->dev;
+	chip->dev_cnt = dev_cnt;
 	mutex_init(&chip->io_lock);
 	i2c_set_clientdata(client, chip);
 
@@ -506,9 +509,16 @@ static int mt6660_i2c_probe(struct i2c_client *client)
 	pm_runtime_set_active(chip->dev);
 	pm_runtime_enable(chip->dev);
 
+	dev_set_name(chip->dev, "MT6660_MT_%d", chip->dev_cnt);
 	ret = devm_snd_soc_register_component(chip->dev,
 					       &mt6660_component_driver,
 					       &mt6660_codec_dai, 1);
+
+	if (ret == 0) {
+		dev_cnt++;
+		mtk_spk_set_type(MTK_SPK_MEDIATEK_MT6660);
+	}
+
 	if (ret)
 		pm_runtime_disable(chip->dev);
 
@@ -519,8 +529,9 @@ probe_fail:
 	mutex_destroy(&chip->io_lock);
 	return ret;
 }
+EXPORT_SYMBOL(mt6660_i2c_probe);
 
-static void mt6660_i2c_remove(struct i2c_client *client)
+void mt6660_i2c_remove(struct i2c_client *client)
 {
 	struct mt6660_chip *chip = i2c_get_clientdata(client);
 
@@ -528,6 +539,7 @@ static void mt6660_i2c_remove(struct i2c_client *client)
 	pm_runtime_set_suspended(chip->dev);
 	mutex_destroy(&chip->io_lock);
 }
+EXPORT_SYMBOL(mt6660_i2c_remove);
 
 static int __maybe_unused mt6660_i2c_runtime_suspend(struct device *dev)
 {

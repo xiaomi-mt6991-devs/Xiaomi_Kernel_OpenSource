@@ -19,3 +19,8 @@ phy-mtk-mipi-dsi-drv-y			:= phy-mtk-mipi-dsi.o
 phy-mtk-mipi-dsi-drv-y			+= phy-mtk-mipi-dsi-mt8173.o
 phy-mtk-mipi-dsi-drv-y			+= phy-mtk-mipi-dsi-mt8183.o
 obj-$(CONFIG_PHY_MTK_MIPI_DSI)		+= phy-mtk-mipi-dsi-drv.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_PHY_MTK_FPGAPHY)		+= phy-mtk-fpgaphy.o
+obj-$(CONFIG_PHY_MTK_NXP_EUSB2_REPEATER)	+= phy-mtk-nxp-eusb2-repeater.o
+obj-$(CONFIG_PHY_MTK_MT6379_EUSB2_REPEATER) 	+= phy-mtk-mt6379-eusb2-repeater.o

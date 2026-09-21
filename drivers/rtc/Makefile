@@ -184,3 +184,6 @@ obj-$(CONFIG_RTC_DRV_WM8350)	+= rtc-wm8350.o
 obj-$(CONFIG_RTC_DRV_X1205)	+= rtc-x1205.o
 obj-$(CONFIG_RTC_DRV_XGENE)	+= rtc-xgene.o
 obj-$(CONFIG_RTC_DRV_ZYNQMP)	+= rtc-zynqmp.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_RTC_DRV_MT6685)	+= rtc-mt6685.o

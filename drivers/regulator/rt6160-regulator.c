@@ -1,14 +1,19 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0
+//
+// Copyright (c) 2021 Mediatek Inc.
 
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of_platform.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/of_regulator.h>
+
+#include "rt6160.h"
 
 #define RT6160_MODE_AUTO	0
 #define RT6160_MODE_FPWM	1
@@ -37,16 +42,26 @@
 #define RT6160_N_VOUTS		((RT6160_VOUT_MAXUV - RT6160_VOUT_MINUV) / RT6160_VOUT_STPUV + 1)
 
 #define RT6160_I2CRDY_TIMEUS	100
+#define TPS63810_DEVICE_ID      0x04
+
+#define RT6160_POLLING_RG_TIME	60000
+
+#define RT6160_MAX	(10)
+static int ot_cnt[RT6160_MAX];
+static int uv_cnt[RT6160_MAX];
+static int oc_cnt[RT6160_MAX];
+
+static int rt6160_cnt;
 
 struct rt6160_priv {
 	struct regulator_desc desc;
+	struct i2c_client *i2c;
 	struct gpio_desc *enable_gpio;
+	struct regulator_dev *rdev;
 	struct regmap *regmap;
+	struct delayed_work polling_error;
 	bool enable_state;
-};
-
-static const unsigned int rt6160_ramp_tables[] = {
-	1000, 2500, 5000, 10000
+	uint8_t id;
 };
 
 static int rt6160_enable(struct regulator_dev *rdev)
@@ -144,8 +159,34 @@ static int rt6160_set_suspend_voltage(struct regulator_dev *rdev, int uV)
 				  RT6160_VSEL_MASK, vsel);
 }
 
+static int rt6160_set_ramp_delay(struct regulator_dev *rdev, int target)
+{
+	struct regmap *regmap = rdev_get_regmap(rdev);
+	const int ramp_tables[] = { 1000, 2500, 5000, 10000 };
+	unsigned int i, sel;
+
+	/* Find closest larger or equal */
+	for (i = 0; i < ARRAY_SIZE(ramp_tables); i++) {
+		sel = i;
+
+		/* If ramp delay is equal to 0, directly set ramp speed to fastest */
+		if (target == 0) {
+			sel = ARRAY_SIZE(ramp_tables) - 1;
+			break;
+		}
+
+		if (target <= ramp_tables[i])
+			break;
+	}
+
+	sel <<= ffs(RT6160_RAMPRATE_MASK) - 1;
+
+	return regmap_update_bits(regmap, RT6160_REG_CNTL, RT6160_RAMPRATE_MASK, sel);
+}
+
 static int rt6160_get_error_flags(struct regulator_dev *rdev, unsigned int *flags)
 {
+	struct rt6160_priv *priv = rdev_get_drvdata(rdev);
 	struct regmap *regmap = rdev_get_regmap(rdev);
 	unsigned int val, events = 0;
 	int ret;
@@ -154,14 +195,20 @@ static int rt6160_get_error_flags(struct regulator_dev *rdev, unsigned int *flag
 	if (ret)
 		return ret;
 
-	if (val & (RT6160_HDSTAT_MASK | RT6160_TSDSTAT_MASK))
+	if (val & (RT6160_HDSTAT_MASK | RT6160_TSDSTAT_MASK)) {
 		events |= REGULATOR_ERROR_OVER_TEMP;
+		ot_cnt[priv->id]++;
+	}
 
-	if (val & RT6160_UVSTAT_MASK)
+	if (val & RT6160_UVSTAT_MASK) {
 		events |= REGULATOR_ERROR_UNDER_VOLTAGE;
+		uv_cnt[priv->id]++;
+	}
 
-	if (val & RT6160_OCSTAT_MASK)
+	if (val & RT6160_OCSTAT_MASK) {
 		events |= REGULATOR_ERROR_OVER_CURRENT;
+		oc_cnt[priv->id]++;
+	}
 
 	if (val & RT6160_PGSTAT_MASK)
 		events |= REGULATOR_ERROR_FAIL;
@@ -182,9 +229,21 @@ static const struct regulator_ops rt6160_regulator_ops = {
 	.set_mode = rt6160_set_mode,
 	.get_mode = rt6160_get_mode,
 	.set_suspend_voltage = rt6160_set_suspend_voltage,
-	.set_ramp_delay = regulator_set_ramp_delay_regmap,
+	.set_ramp_delay = rt6160_set_ramp_delay,
 	.get_error_flags = rt6160_get_error_flags,
 };
+
+static void rt6160_polling_error_func(struct work_struct *work)
+{
+	struct rt6160_priv *priv = container_of(work, struct rt6160_priv, polling_error.work);
+	int ret = 0;
+	unsigned int flags = 0;
+
+	schedule_delayed_work(&priv->polling_error, msecs_to_jiffies(RT6160_POLLING_RG_TIME));
+	ret = rt6160_get_error_flags(priv->rdev, &flags);
+	if (!ret)
+		dev_info(&priv->i2c->dev, "%s flags = %x\n", __func__, flags);
+}
 
 static unsigned int rt6160_of_map_mode(unsigned int mode)
 {
@@ -217,7 +276,7 @@ static const struct regmap_config rt6160_regmap_config = {
 	.val_bits = 8,
 	.max_register = RT6160_REG_VSELH,
 	.num_reg_defaults_raw = RT6160_NUM_REGS,
-	.cache_type = REGCACHE_FLAT,
+	.cache_type = REGCACHE_NONE,
 
 	.writeable_reg = rt6160_is_accessible_reg,
 	.readable_reg = rt6160_is_accessible_reg,
@@ -228,7 +287,6 @@ static int rt6160_probe(struct i2c_client *i2c)
 {
 	struct rt6160_priv *priv;
 	struct regulator_config regulator_cfg = {};
-	struct regulator_dev *rdev;
 	bool vsel_active_low;
 	unsigned int devid;
 	int ret;
@@ -239,6 +297,7 @@ static int rt6160_probe(struct i2c_client *i2c)
 
 	vsel_active_low =
 		device_property_present(&i2c->dev, "richtek,vsel-active-low");
+
 
 	priv->enable_gpio = devm_gpiod_get_optional(&i2c->dev, "enable", GPIOD_OUT_HIGH);
 	if (IS_ERR(priv->enable_gpio)) {
@@ -256,14 +315,18 @@ static int rt6160_probe(struct i2c_client *i2c)
 		return ret;
 	}
 
+	priv->i2c = i2c;
+
 	ret = regmap_read(priv->regmap, RT6160_REG_DEVID, &devid);
 	if (ret)
 		return ret;
 
-	if ((devid & RT6160_VID_MASK) != RT6160_VENDOR_ID) {
+	if (((devid & RT6160_VID_MASK) != RT6160_VENDOR_ID) && (devid != TPS63810_DEVICE_ID)) {
 		dev_err(&i2c->dev, "VID not correct [0x%02x]\n", devid);
 		return -ENODEV;
 	}
+
+	i2c_set_clientdata(i2c, priv);
 
 	priv->desc.name = "rt6160-buckboost";
 	priv->desc.type = REGULATOR_VOLTAGE;
@@ -276,10 +339,6 @@ static int rt6160_probe(struct i2c_client *i2c)
 		priv->desc.vsel_reg = RT6160_REG_VSELH;
 	priv->desc.vsel_mask = RT6160_VSEL_MASK;
 	priv->desc.n_voltages = RT6160_N_VOUTS;
-	priv->desc.ramp_reg = RT6160_REG_CNTL;
-	priv->desc.ramp_mask = RT6160_RAMPRATE_MASK;
-	priv->desc.ramp_delay_table = rt6160_ramp_tables;
-	priv->desc.n_ramp_values = ARRAY_SIZE(rt6160_ramp_tables);
 	priv->desc.of_map_mode = rt6160_of_map_mode;
 	priv->desc.ops = &rt6160_regulator_ops;
 
@@ -290,14 +349,62 @@ static int rt6160_probe(struct i2c_client *i2c)
 	regulator_cfg.init_data = of_get_regulator_init_data(&i2c->dev, i2c->dev.of_node,
 							     &priv->desc);
 
-	rdev = devm_regulator_register(&i2c->dev, &priv->desc, &regulator_cfg);
-	if (IS_ERR(rdev)) {
+	priv->rdev = devm_regulator_register(&i2c->dev, &priv->desc, &regulator_cfg);
+	if (IS_ERR(priv->rdev)) {
 		dev_err(&i2c->dev, "Failed to register regulator\n");
-		return PTR_ERR(rdev);
+		return PTR_ERR(priv->rdev);
 	}
 
+	ret = devm_of_platform_populate(&i2c->dev);
+	if (ret) {
+		dev_notice(&i2c->dev, "Failed to add platform device\n");
+		return ret;
+	}
+
+	if (rt6160_cnt < RT6160_MAX) {
+		priv->id = rt6160_cnt;
+		rt6160_cnt++;
+		INIT_DELAYED_WORK(&priv->polling_error, rt6160_polling_error_func);
+		schedule_delayed_work(&priv->polling_error, msecs_to_jiffies(RT6160_POLLING_RG_TIME));
+	};
 	return 0;
 }
+
+int rt6160_get_chip_num(void)
+{
+	return rt6160_cnt;
+}
+EXPORT_SYMBOL(rt6160_get_chip_num);
+
+static int __maybe_unused rt6160_suspend(struct device *dev)
+{
+	struct rt6160_priv *priv = dev_get_drvdata(dev);
+
+	cancel_delayed_work_sync(&priv->polling_error);
+	return 0;
+}
+
+static int __maybe_unused rt6160_resume(struct device *dev)
+{
+	struct rt6160_priv *priv = dev_get_drvdata(dev);
+
+	schedule_delayed_work(&priv->polling_error, msecs_to_jiffies(RT6160_POLLING_RG_TIME));
+	return 0;
+}
+
+static const struct dev_pm_ops rt6160_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rt6160_suspend, rt6160_resume)
+};
+
+
+void rt6160_get_error_cnt(int id, struct rt6160_error *error)
+{
+	error->ot = ot_cnt[id];
+	error->uv = uv_cnt[id];
+	error->oc = oc_cnt[id];
+	ot_cnt[id] = uv_cnt[id] = oc_cnt[id] = 0;
+}
+EXPORT_SYMBOL(rt6160_get_error_cnt);
 
 static const struct of_device_id __maybe_unused rt6160_of_match_table[] = {
 	{ .compatible = "richtek,rt6160", },
@@ -308,13 +415,13 @@ MODULE_DEVICE_TABLE(of, rt6160_of_match_table);
 static struct i2c_driver rt6160_driver = {
 	.driver = {
 		.name = "rt6160",
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		.of_match_table = rt6160_of_match_table,
+		.pm = &rt6160_pm_ops,
 	},
 	.probe = rt6160_probe,
 };
 module_i2c_driver(rt6160_driver);
 
-MODULE_DESCRIPTION("Richtek RT6160 voltage regulator driver");
 MODULE_AUTHOR("ChiYuan Huang <cy_huang@richtek.com>");
+MODULE_DESCRIPTION("Richtek RT6160 Voltage Regulator Driver");
 MODULE_LICENSE("GPL v2");

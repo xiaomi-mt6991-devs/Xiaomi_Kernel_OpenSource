@@ -39,3 +39,7 @@ obj-$(CONFIG_STM32_RPROC)		+= stm32_rproc.o
 obj-$(CONFIG_TI_K3_DSP_REMOTEPROC)	+= ti_k3_dsp_remoteproc.o
 obj-$(CONFIG_TI_K3_R5_REMOTEPROC)	+= ti_k3_r5_remoteproc.o
 obj-$(CONFIG_XLNX_R5_REMOTEPROC)	+= xlnx_r5_remoteproc.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MTK_CCU_RPROC)		+= mtk_ccu.o
+obj-$(CONFIG_MTK_CCU_RPROC)		+= mtk_ccu_mssv.o

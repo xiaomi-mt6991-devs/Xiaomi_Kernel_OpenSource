@@ -210,7 +210,6 @@ static struct qmu_gpd *advance_enq_gpd(struct mtu3_gpd_ring *ring)
 	return ring->enqueue;
 }
 
-/* @dequeue may be NULL if ring is unallocated or freed */
 static struct qmu_gpd *advance_deq_gpd(struct mtu3_gpd_ring *ring)
 {
 	if (ring->dequeue < ring->end)
@@ -484,7 +483,7 @@ static void qmu_error_rx(struct mtu3 *mtu, u8 epnum)
 
 	mreq = next_request(mep);
 	if (!mreq || mreq->gpd != gpd_current) {
-		dev_err(mtu->dev, "no correct RX req is found\n");
+		dev_info(mtu->dev, "no correct RX req is found\n");
 		return;
 	}
 
@@ -538,6 +537,11 @@ static void qmu_done_tx(struct mtu3 *mtu, u8 epnum)
 		mtu3_req_complete(mep, request, 0);
 
 		gpd = advance_deq_gpd(ring);
+
+		if (!gpd) {
+			dev_err(mtu->dev, "[TX] EP%d GPD null!\n", epnum);
+			return;
+		}
 	}
 
 	dev_dbg(mtu->dev, "%s EP%d, deq=%p, enq=%p, complete\n",
@@ -577,6 +581,11 @@ static void qmu_done_rx(struct mtu3 *mtu, u8 epnum)
 		mtu3_req_complete(mep, req, 0);
 
 		gpd = advance_deq_gpd(ring);
+
+		if (!gpd) {
+			dev_err(mtu->dev, "[RX] EP%d GPD null!\n", epnum);
+			return;
+		}
 	}
 
 	dev_dbg(mtu->dev, "%s EP%d, deq=%p, enq=%p, complete\n",

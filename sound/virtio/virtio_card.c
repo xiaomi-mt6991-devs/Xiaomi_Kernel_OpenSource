@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
+ * Copyright (c) 2024 MediaTek Inc.
  * virtio-snd: Virtio sound device
  * Copyright (C) 2021 OpenSynergy GmbH
  */
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/virtio_config.h>
+// #include <linux/dma-map-ops.h>
+// #include <linux/dma-mapping.h>
 #include <sound/initval.h>
+#include <sound/control.h>
 #include <uapi/linux/virtio_ids.h>
 
 #include "virtio_card.h"
@@ -132,7 +136,7 @@ static int virtsnd_find_vqs(struct virtio_snd *snd)
 	rc = virtio_find_vqs(vdev, VIRTIO_SND_VQ_MAX, vqs, callbacks, names,
 			     NULL);
 	if (rc) {
-		dev_err(&vdev->dev, "failed to initialize virtqueues\n");
+		dev_info(&vdev->dev, "failed to initialize virtqueues\n");
 		return rc;
 	}
 
@@ -238,6 +242,7 @@ static int virtsnd_build_devs(struct virtio_snd *snd)
 	if (rc)
 		return rc;
 
+
 	if (virtio_has_feature(vdev, VIRTIO_SND_F_CTLS)) {
 		rc = virtsnd_kctl_parse_cfg(snd);
 		if (rc)
@@ -281,18 +286,18 @@ static int virtsnd_build_devs(struct virtio_snd *snd)
 static int virtsnd_validate(struct virtio_device *vdev)
 {
 	if (!vdev->config->get) {
-		dev_err(&vdev->dev, "configuration access disabled\n");
+		dev_info(&vdev->dev, "configuration access disabled\n");
 		return -EINVAL;
 	}
 
 	if (!virtio_has_feature(vdev, VIRTIO_F_VERSION_1)) {
-		dev_err(&vdev->dev,
+		dev_info(&vdev->dev,
 			"device does not comply with spec version 1.x\n");
 		return -EINVAL;
 	}
 
 	if (!virtsnd_msg_timeout_ms) {
-		dev_err(&vdev->dev, "msg_timeout_ms value cannot be zero\n");
+		dev_info(&vdev->dev, "msg_timeout_ms value cannot be zero\n");
 		return -EINVAL;
 	}
 
@@ -312,6 +317,7 @@ static int virtsnd_validate(struct virtio_device *vdev)
 static int virtsnd_probe(struct virtio_device *vdev)
 {
 	struct virtio_snd *snd;
+	//struct device *dev = &vdev->dev; //need restore?
 	unsigned int i;
 	int rc;
 
@@ -333,6 +339,8 @@ static int virtsnd_probe(struct virtio_device *vdev)
 		goto on_exit;
 
 	virtio_device_ready(vdev);
+
+	//arch_setup_dma_ops(dev, -1, -1, NULL, 0); //need restore?
 
 	rc = virtsnd_build_devs(snd);
 	if (rc)
@@ -365,12 +373,13 @@ static void virtsnd_remove(struct virtio_device *vdev)
 		snd_card_free(snd->card);
 
 	vdev->config->del_vqs(vdev);
-	virtio_reset_device(vdev);
+	vdev->config->reset(vdev);
 
 	for (i = 0; snd->substreams && i < snd->nsubstreams; ++i) {
 		struct virtio_pcm_substream *vss = &snd->substreams[i];
-
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 		cancel_work_sync(&vss->elapsed_period);
+#endif
 		virtsnd_pcm_msg_free(vss);
 	}
 
@@ -385,25 +394,25 @@ static void virtsnd_remove(struct virtio_device *vdev)
  * Context: Any context.
  * Return: 0 on success, -errno on failure.
  */
-static int virtsnd_freeze(struct virtio_device *vdev)
-{
-	struct virtio_snd *snd = vdev->priv;
-	unsigned int i;
+// static int virtsnd_freeze(struct virtio_device *vdev)
+// {
+//	struct virtio_snd *snd = vdev->priv;
+//	unsigned int i;
 
-	virtsnd_disable_event_vq(snd);
-	virtsnd_ctl_msg_cancel_all(snd);
+//	virtsnd_disable_event_vq(snd);
+//	virtsnd_ctl_msg_cancel_all(snd);
 
-	vdev->config->del_vqs(vdev);
-	virtio_reset_device(vdev);
+//	vdev->config->del_vqs(vdev);
+//	vdev->config->reset(vdev);
 
-	for (i = 0; i < snd->nsubstreams; ++i)
-		cancel_work_sync(&snd->substreams[i].elapsed_period);
+//	for (i = 0; i < snd->nsubstreams; ++i)
+//		cancel_work_sync(&snd->substreams[i].elapsed_period);
 
-	kfree(snd->event_msgs);
-	snd->event_msgs = NULL;
+//	kfree(snd->event_msgs);
+//	snd->event_msgs = NULL;
 
-	return 0;
-}
+//	return 0;
+// }
 
 /**
  * virtsnd_restore() - Resume device.
@@ -412,21 +421,21 @@ static int virtsnd_freeze(struct virtio_device *vdev)
  * Context: Any context.
  * Return: 0 on success, -errno on failure.
  */
-static int virtsnd_restore(struct virtio_device *vdev)
-{
-	struct virtio_snd *snd = vdev->priv;
-	int rc;
+// static int virtsnd_restore(struct virtio_device *vdev)
+// {
+//	struct virtio_snd *snd = vdev->priv;
+//	int rc;
 
-	rc = virtsnd_find_vqs(snd);
-	if (rc)
-		return rc;
+//	rc = virtsnd_find_vqs(snd);
+//	if (rc)
+//		return rc;
 
-	virtio_device_ready(vdev);
+//	virtio_device_ready(vdev);
 
-	virtsnd_enable_event_vq(snd);
+//	virtsnd_enable_event_vq(snd);
 
-	return 0;
-}
+//	return 0;
+// }
 #endif /* CONFIG_PM_SLEEP */
 
 static const struct virtio_device_id id_table[] = {
@@ -448,8 +457,8 @@ static struct virtio_driver virtsnd_driver = {
 	.probe = virtsnd_probe,
 	.remove = virtsnd_remove,
 #ifdef CONFIG_PM_SLEEP
-	.freeze = virtsnd_freeze,
-	.restore = virtsnd_restore,
+	//.freeze = virtsnd_freeze,
+	//.restore = virtsnd_restore,
 #endif
 };
 

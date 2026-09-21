@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Support GKI mixed build
+
+ifeq ($(srctree),)
+DEVICE_MODULES_PATH = $(srctree)
+else
+LINUXINCLUDE := $(DEVCIE_MODULES_INCLUDE) $(LINUXINCLUDE)
+endif
+
+ccflags-y += -I$(srctree)/drivers/remoteproc
+
+obj-$(CONFIG_MTK_CCU_RPROC)	+= mtk_ccuv.o
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/mtk-interconnect/ \
+			-I$(srctree)/drivers/misc/mediatek/include \
+			-I$(srctree)/drivers/misc/mediatek/iommu \
+			-I$(srctree)/drivers/iommu/arm/arm-smmu-v3 \
+			-I$(srctree)/drivers/dma-buf/heaps
+
+mtk_ccuv-objs += mtk_ccu_isp71.o mtk_ccu_common.o mtk_ccu_ipi.o

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
+ * Copyright (c) 2024 MediaTek Inc.
  * virtio-snd: Virtio sound device
  * Copyright (C) 2021 OpenSynergy GmbH
  */
@@ -97,7 +98,7 @@ int virtsnd_chmap_parse_cfg(struct virtio_snd *snd)
 			vs = &vpcm->streams[SNDRV_PCM_STREAM_CAPTURE];
 			break;
 		default:
-			dev_err(&vdev->dev,
+			dev_info(&vdev->dev,
 				"chmap #%u: unknown direction (%u)\n", i,
 				info->direction);
 			return -EINVAL;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
+ * Copyright (c) 2024 MediaTek Inc.
  * virtio-snd: Virtio sound device
  * Copyright (C) 2021 OpenSynergy GmbH
  */
@@ -158,7 +159,7 @@ int virtsnd_ctl_msg_send(struct virtio_snd *snd, struct virtio_snd_msg *msg,
 	spin_unlock_irqrestore(&queue->lock, flags);
 
 	if (rc) {
-		dev_err(&vdev->dev, "failed to send control message (0x%08x)\n",
+		dev_info(&vdev->dev, "failed to send control message (0x%08x)\n",
 			le32_to_cpu(request->code));
 
 		/*
@@ -179,7 +180,7 @@ int virtsnd_ctl_msg_send(struct virtio_snd *snd, struct virtio_snd_msg *msg,
 	rc = wait_for_completion_interruptible_timeout(&msg->notify, js);
 	if (rc <= 0) {
 		if (!rc) {
-			dev_err(&vdev->dev,
+			dev_info(&vdev->dev,
 				"control message (0x%08x) timeout\n",
 				le32_to_cpu(request->code));
 			rc = -ETIMEDOUT;

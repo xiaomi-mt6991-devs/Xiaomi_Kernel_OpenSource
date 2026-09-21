@@ -81,3 +81,9 @@ obj-$(CONFIG_NVMEM_ZYNQMP)		+= nvmem_zynqmp_nvmem.o
 nvmem_zynqmp_nvmem-y			:= zynqmp_nvmem.o
 obj-$(CONFIG_NVMEM_QORIQ_EFUSE)		+= nvmem-qoriq-efuse.o
 nvmem-qoriq-efuse-y			:= qoriq-efuse.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MTK_DEVINFO)	+= nvmem_mtk-devinfo.o
+obj-$(CONFIG_MT635X_EFUSE)	+= nvmem-mt635x-efuse.o
+obj-$(CONFIG_MT6338_EFUSE)	+= nvmem-mt6338-efuse.o
+obj-$(CONFIG_MT6681_EFUSE)	+= nvmem-mt6681-efuse.o

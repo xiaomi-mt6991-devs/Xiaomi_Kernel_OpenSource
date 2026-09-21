@@ -113,13 +113,16 @@ enum {
 	MT6360_RANGE_MAX,
 };
 
+#define MT6360_LINEAR_RANGE(idx, _min, _min_sel, _max_sel, _step) \
+	[idx] = REGULATOR_LINEAR_RANGE(_min, _min_sel, _max_sel, _step)
+
 static const struct linear_range mt6360_chg_range[MT6360_RANGE_MAX] = {
-	LINEAR_RANGE_IDX(MT6360_RANGE_VMIVR, 3900000, 0, 0x5F, 100000),
-	LINEAR_RANGE_IDX(MT6360_RANGE_ICHG, 100000, 0, 0x31, 100000),
-	LINEAR_RANGE_IDX(MT6360_RANGE_VOREG, 3900000, 0, 0x51, 10000),
-	LINEAR_RANGE_IDX(MT6360_RANGE_AICR, 100000, 0, 0x3F, 50000),
-	LINEAR_RANGE_IDX(MT6360_RANGE_IPREC, 100000, 0, 0x0F, 50000),
-	LINEAR_RANGE_IDX(MT6360_RANGE_IEOC, 100000, 0, 0x0F, 50000),
+	MT6360_LINEAR_RANGE(MT6360_RANGE_VMIVR, 3900000, 0, 0x5F, 100000),
+	MT6360_LINEAR_RANGE(MT6360_RANGE_ICHG, 100000, 0, 0x31, 100000),
+	MT6360_LINEAR_RANGE(MT6360_RANGE_VOREG, 3900000, 0, 0x51, 10000),
+	MT6360_LINEAR_RANGE(MT6360_RANGE_AICR, 100000, 0, 0x3F, 50000),
+	MT6360_LINEAR_RANGE(MT6360_RANGE_IPREC, 100000, 0, 0x0F, 50000),
+	MT6360_LINEAR_RANGE(MT6360_RANGE_IEOC, 100000, 0, 0x0F, 50000),
 };
 
 struct mt6360_chg_info {
@@ -457,6 +460,9 @@ static int mt6360_charger_get_property(struct power_supply *psy,
 	struct mt6360_chg_info *mci = power_supply_get_drvdata(psy);
 	int ret = 0;
 
+	if (!mci)
+		return -EINVAL;
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
 		ret = mt6360_charger_get_online(mci, val);
@@ -506,6 +512,9 @@ static int mt6360_charger_set_property(struct power_supply *psy,
 {
 	struct mt6360_chg_info *mci = power_supply_get_drvdata(psy);
 	int ret;
+
+	if (!mci)
+		return -EINVAL;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
@@ -588,7 +597,7 @@ static const struct regulator_ops mt6360_chg_otg_ops = {
 };
 
 static const struct regulator_desc mt6360_otg_rdesc = {
-	.of_match = "usb-otg-vbus-regulator",
+	.of_match = "usb-otg-vbus",
 	.name = "usb-otg-vbus",
 	.ops = &mt6360_chg_otg_ops,
 	.owner = THIS_MODULE,
@@ -796,9 +805,7 @@ static int mt6360_charger_probe(struct platform_device *pdev)
 	mci->vinovp = 6500000;
 	mutex_init(&mci->chgdet_lock);
 	platform_set_drvdata(pdev, mci);
-	ret = devm_work_autocancel(&pdev->dev, &mci->chrdet_work, mt6360_chrdet_work);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret, "Failed to set delayed work\n");
+	devm_work_autocancel(&pdev->dev, &mci->chrdet_work, mt6360_chrdet_work);
 
 	ret = device_property_read_u32(&pdev->dev, "richtek,vinovp-microvolt", &mci->vinovp);
 	if (ret)

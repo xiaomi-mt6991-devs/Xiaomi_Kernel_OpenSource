@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (C) 2022 Richtek Technology Corp.
+ * Copyright (c) 2022 Mediatek Inc.
  *
  * Author: ChiYuan Huang <cy_huang@richtek.com>
  */
@@ -119,6 +119,7 @@ static const struct regmap_irq_chip mt6370_irq_chip = {
 	.num_regs	= MT6370_NUM_IRQREGS,
 	.irqs		= mt6370_irqs,
 	.num_irqs	= ARRAY_SIZE(mt6370_irqs),
+	.init_ack_masked = true,
 };
 
 static const struct resource mt6370_regulator_irqs[] = {
@@ -141,6 +142,8 @@ static const struct mfd_cell mt6370_devices[] = {
 		    NULL, NULL, 0, 0, "mediatek,mt6370-indicator"),
 	MFD_CELL_OF("mt6370-tcpc",
 		    NULL, NULL, 0, 0, "mediatek,mt6370-tcpc"),
+	MFD_CELL_OF("mt6370-dbg",
+		    NULL, NULL, 0, 0, "mediatek,mt6370-dbg"),
 	MFD_CELL_RES("mt6370-regulator", mt6370_regulator_irqs),
 };
 
@@ -292,6 +295,30 @@ static int mt6370_probe(struct i2c_client *i2c)
 				    regmap_irq_get_domain(info->irq_data));
 }
 
+static int __maybe_unused mt6370_suspend(struct device *dev)
+{
+	struct i2c_client *i2c = to_i2c_client(dev);
+
+	if (device_may_wakeup(dev))
+		enable_irq_wake(i2c->irq);
+	disable_irq(i2c->irq);
+	return 0;
+}
+
+static int __maybe_unused mt6370_resume(struct device *dev)
+{
+	struct i2c_client *i2c = to_i2c_client(dev);
+
+	enable_irq(i2c->irq);
+	if (device_may_wakeup(dev))
+		disable_irq_wake(i2c->irq);
+	return 0;
+}
+
+static const struct dev_pm_ops mt6370_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(mt6370_suspend, mt6370_resume)
+};
+
 static const struct of_device_id mt6370_match_table[] = {
 	{ .compatible = "mediatek,mt6370" },
 	{}
@@ -301,6 +328,7 @@ MODULE_DEVICE_TABLE(of, mt6370_match_table);
 static struct i2c_driver mt6370_driver = {
 	.driver = {
 		.name = "mt6370",
+		.pm = &mt6370_pm_ops,
 		.of_match_table = mt6370_match_table,
 	},
 	.probe = mt6370_probe,

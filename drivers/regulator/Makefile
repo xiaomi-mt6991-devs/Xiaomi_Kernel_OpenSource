@@ -197,3 +197,23 @@ obj-$(CONFIG_REGULATOR_WM8400) += wm8400-regulator.o
 obj-$(CONFIG_REGULATOR_WM8994) += wm8994-regulator.o
 
 ccflags-$(CONFIG_REGULATOR_DEBUG) += -DDEBUG
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_REGULATOR_MT6315) += mtk-extbuck-debug.o
+obj-$(CONFIG_REGULATOR_MT6316) += mt6316-regulator.o
+obj-$(CONFIG_REGULATOR_MT6359P) += mt6359p-regulator.o
+obj-$(CONFIG_REGULATOR_MT6362) += mt6362-regulator.o
+obj-$(CONFIG_REGULATOR_MT6363) += mt6363-regulator.o
+obj-$(CONFIG_REGULATOR_MT6368) += mt6368-regulator.o
+obj-$(CONFIG_REGULATOR_MT6369) += mt6369-regulator.o
+obj-$(CONFIG_REGULATOR_MT6373) += mt6373-regulator.o
+obj-$(CONFIG_REGULATOR_MT6379) += mt6379-regulator.o
+obj-$(CONFIG_REGULATOR_MT6681) += mt6681-regulator.o
+obj-$(CONFIG_REGULATOR_MTK_VMM_ISP71) += mtk-vmm-isp71-regulator.o
+obj-$(CONFIG_REGULATOR_RT5133)  += rt5133-regulator.o
+obj-$(CONFIG_REGULATOR_WL2866D) += wl2866d.o
+obj-$(CONFIG_REGULATOR_SGM38121)+= sgm38121.o
+obj-m += wl28681c.o
+obj-m += aw37004-regulator.o
+obj-m += et5907mv.o
+obj-m += wl2866d2.o

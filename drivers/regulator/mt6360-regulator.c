@@ -15,6 +15,14 @@
 
 #include <dt-bindings/regulator/mediatek,mt6360-regulator.h>
 
+#define MT6360_REG_BUCK1_SEQOFFDLY	0x107
+#define MT6360_REG_LDO5CTRL0		0x20C
+
+#define MT6360_MASK_SDCARD_HLACT	BIT(7)
+#define MT6360_MASK_SDCARD_DET_EN	BIT(6)
+
+#define MT6360_NUMS_OF_PWROFF_CHAN	4
+
 enum {
 	MT6360_REGULATOR_BUCK1 = 0,
 	MT6360_REGULATOR_BUCK2,
@@ -45,6 +53,7 @@ struct mt6360_regulator_desc {
 struct mt6360_regulator_data {
 	struct device *dev;
 	struct regmap *regmap;
+	u8 pwr_off_seq[MT6360_NUMS_OF_PWROFF_CHAN];
 };
 
 static irqreturn_t mt6360_pgb_event_handler(int irq, void *data)
@@ -217,6 +226,46 @@ static const struct linear_range ldo_vout_ranges3[] = {
 	REGULATOR_LINEAR_RANGE(3600000, 0x7a, 0x7f, 0),
 };
 
+static int mt6360_regulator_enable(struct regulator_dev *rdev)
+{
+	const struct regulator_desc *desc = rdev->desc;
+	struct regmap *regmap = rdev_get_regmap(rdev);
+	int id = rdev_get_id(rdev), ret;
+
+	ret = regmap_update_bits(regmap, desc->enable_reg,
+				 desc->enable_mask, 0xff);
+	if (ret < 0) {
+		dev_notice(&rdev->dev, "%s: fail\n", __func__);
+		return ret;
+	}
+
+	/* when LDO5 enable, enable SDCARD_DET */
+	if (id == MT6360_REGULATOR_LDO5)
+		ret = regmap_update_bits(regmap, MT6360_REG_LDO5CTRL0,
+					 MT6360_MASK_SDCARD_DET_EN, 0xff);
+	return ret;
+}
+
+static int mt6360_regulator_disable(struct regulator_dev *rdev)
+{
+	struct regmap *regmap = rdev_get_regmap(rdev);
+	const struct regulator_desc *desc = rdev->desc;
+	int id = rdev_get_id(rdev), ret;
+
+	ret = regmap_update_bits(regmap, desc->enable_reg,
+				 desc->enable_mask, 0);
+	if (ret < 0) {
+		dev_notice(&rdev->dev, "%s: fail\n", __func__);
+		return ret;
+	}
+
+	/* when LDO5 disable, disable SDCARD_DET */
+	if (id == MT6360_REGULATOR_LDO5)
+		ret = regmap_update_bits(regmap, MT6360_REG_LDO5CTRL0,
+					 MT6360_MASK_SDCARD_DET_EN, 0);
+	return ret;
+}
+
 static int mt6360_regulator_set_mode(struct regulator_dev *rdev,
 				     unsigned int mode)
 {
@@ -242,7 +291,7 @@ static int mt6360_regulator_set_mode(struct regulator_dev *rdev,
 
 	ret = regmap_update_bits(regmap, rdesc->mode_reg, rdesc->mode_mask, val << shift);
 	if (ret) {
-		dev_err(&rdev->dev, "%s: fail (%d)\n", __func__, ret);
+		dev_dbg(&rdev->dev, "%s: fail (%d)\n", __func__, ret);
 		return ret;
 	}
 
@@ -295,8 +344,8 @@ static int mt6360_regulator_get_status(struct regulator_dev *rdev)
 
 static const struct regulator_ops mt6360_regulator_ops = {
 	.list_voltage = regulator_list_voltage_linear_range,
-	.enable = regulator_enable_regmap,
-	.disable = regulator_disable_regmap,
+	.enable = mt6360_regulator_enable,
+	.disable = mt6360_regulator_disable,
 	.is_enabled = regulator_is_enabled_regmap,
 	.set_voltage_sel = regulator_set_voltage_sel_regmap,
 	.get_voltage_sel = regulator_get_voltage_sel_regmap,
@@ -319,15 +368,14 @@ static unsigned int mt6360_regulator_of_map_mode(unsigned int hw_mode)
 	}
 }
 
-#define MT6360_REGULATOR_DESC(match, _name, _sname, ereg, emask, vreg,	\
-			      vmask, mreg, mmask, streg, stmask,	\
-			      vranges, vcnts, offon_delay, irq_tbls)	\
+#define MT6360_REGULATOR_DESC(_name, ereg, emask, vreg,	vmask,		\
+			      mreg, mmask, streg, stmask, vranges,	\
+			      vcnts, offon_delay, irq_tbls)		\
 {									\
 	.desc = {							\
 		.name = #_name,						\
-		.supply_name = #_sname,					\
-		.id =  MT6360_REGULATOR_##_name,			\
-		.of_match = of_match_ptr(match),			\
+		.id = MT6360_REGULATOR_##_name,				\
+		.of_match = of_match_ptr(#_name),			\
 		.regulators_node = of_match_ptr("regulator"),		\
 		.of_map_mode = mt6360_regulator_of_map_mode,		\
 		.owner = THIS_MODULE,					\
@@ -351,29 +399,21 @@ static unsigned int mt6360_regulator_of_map_mode(unsigned int hw_mode)
 }
 
 static const struct mt6360_regulator_desc mt6360_regulator_descs[] =  {
-	MT6360_REGULATOR_DESC("buck1", BUCK1, BUCK1_VIN,
-			      0x117, 0x40, 0x110, 0xff, 0x117, 0x30, 0x117, 0x04,
+	MT6360_REGULATOR_DESC(BUCK1, 0x117, 0x40, 0x110, 0xff, 0x117, 0x30, 0x117, 0x04,
 			      buck_vout_ranges, 256, 0, buck1_irq_tbls),
-	MT6360_REGULATOR_DESC("buck2", BUCK2, BUCK2_VIN,
-			      0x127, 0x40, 0x120, 0xff, 0x127, 0x30, 0x127, 0x04,
+	MT6360_REGULATOR_DESC(BUCK2, 0x127, 0x40, 0x120, 0xff, 0x127, 0x30, 0x127, 0x04,
 			      buck_vout_ranges, 256, 0, buck2_irq_tbls),
-	MT6360_REGULATOR_DESC("ldo6", LDO6, LDO_VIN3,
-			      0x137, 0x40, 0x13B, 0xff, 0x137, 0x30, 0x137, 0x04,
+	MT6360_REGULATOR_DESC(LDO6, 0x137, 0x40, 0x13B, 0xff, 0x137, 0x30, 0x137, 0x04,
 			      ldo_vout_ranges1, 256, 0, ldo6_irq_tbls),
-	MT6360_REGULATOR_DESC("ldo7", LDO7, LDO_VIN3,
-			      0x131, 0x40, 0x135, 0xff, 0x131, 0x30, 0x131, 0x04,
+	MT6360_REGULATOR_DESC(LDO7, 0x131, 0x40, 0x135, 0xff, 0x131, 0x30, 0x131, 0x04,
 			      ldo_vout_ranges1, 256, 0, ldo7_irq_tbls),
-	MT6360_REGULATOR_DESC("ldo1", LDO1, LDO_VIN1,
-			      0x217, 0x40, 0x21B, 0xff, 0x217, 0x30, 0x217, 0x04,
+	MT6360_REGULATOR_DESC(LDO1, 0x217, 0x40, 0x21B, 0xff, 0x217, 0x30, 0x217, 0x04,
 			      ldo_vout_ranges2, 256, 0, ldo1_irq_tbls),
-	MT6360_REGULATOR_DESC("ldo2", LDO2, LDO_VIN1,
-			      0x211, 0x40, 0x215, 0xff, 0x211, 0x30, 0x211, 0x04,
+	MT6360_REGULATOR_DESC(LDO2, 0x211, 0x40, 0x215, 0xff, 0x211, 0x30, 0x211, 0x04,
 			      ldo_vout_ranges2, 256, 0, ldo2_irq_tbls),
-	MT6360_REGULATOR_DESC("ldo3", LDO3, LDO_VIN1,
-			      0x205, 0x40, 0x209, 0xff, 0x205, 0x30, 0x205, 0x04,
+	MT6360_REGULATOR_DESC(LDO3, 0x205, 0x40, 0x209, 0xff, 0x205, 0x30, 0x205, 0x04,
 			      ldo_vout_ranges2, 256, 100, ldo3_irq_tbls),
-	MT6360_REGULATOR_DESC("ldo5", LDO5, LDO_VIN2,
-			      0x20B, 0x40, 0x20F, 0x7f, 0x20B, 0x30, 0x20B, 0x04,
+	MT6360_REGULATOR_DESC(LDO5, 0x20B, 0x40, 0x20F, 0x7f, 0x20B, 0x30, 0x20B, 0x04,
 			      ldo_vout_ranges3, 128, 100, ldo5_irq_tbls),
 };
 
@@ -394,7 +434,7 @@ static int mt6360_regulator_irq_register(struct platform_device *pdev,
 		ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, irq_desc->handler, 0,
 						irq_desc->name, rdev);
 		if (ret) {
-			dev_err(&pdev->dev, "Fail to request %s irq\n", irq_desc->name);
+			dev_dbg(&pdev->dev, "Fail to request %s irq\n", irq_desc->name);
 			return ret;
 		}
 	}
@@ -406,6 +446,8 @@ static int mt6360_regulator_probe(struct platform_device *pdev)
 {
 	struct mt6360_regulator_data *mrd;
 	struct regulator_config config = {};
+	struct fwnode_handle *fwnode;
+	u32 sdcard_hlact = 1;
 	int i, ret;
 
 	mrd = devm_kzalloc(&pdev->dev, sizeof(*mrd), GFP_KERNEL);
@@ -413,12 +455,28 @@ static int mt6360_regulator_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	mrd->dev = &pdev->dev;
+	platform_set_drvdata(pdev, mrd);
 
 	mrd->regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!mrd->regmap) {
-		dev_err(&pdev->dev, "Failed to get parent regmap\n");
+		dev_dbg(&pdev->dev, "Failed to get parent regmap\n");
 		return -ENODEV;
 	}
+
+	fwnode = device_get_named_child_node(pdev->dev.parent, "regulator");
+	if (fwnode && fwnode_property_read_u8_array(fwnode, "pwr-off-seq", mrd->pwr_off_seq,
+						    MT6360_NUMS_OF_PWROFF_CHAN))
+		dev_info(mrd->dev, "Failed to parse pwr-off-seq\n");
+
+	if (fwnode && fwnode_property_read_u32(fwnode, "sdcard-hlact", &sdcard_hlact))
+		dev_info(mrd->dev, "Failed to parse sdcard-hlact, keep default(1: hlact)\n");
+
+	ret = regmap_update_bits(mrd->regmap, MT6360_REG_LDO5CTRL0, MT6360_MASK_SDCARD_HLACT,
+				 sdcard_hlact ? MT6360_MASK_SDCARD_HLACT : 0);
+	if (ret)
+		dev_info(mrd->dev, "Failed to wrtie sdcard_hlact to %d\n", sdcard_hlact);
+	else
+		dev_info(mrd->dev, "%s, sdcard_hlact: %d\n", __func__, sdcard_hlact);
 
 	config.dev = pdev->dev.parent;
 	config.driver_data = mrd;
@@ -430,19 +488,28 @@ static int mt6360_regulator_probe(struct platform_device *pdev)
 
 		rdev = devm_regulator_register(&pdev->dev, &rdesc->desc, &config);
 		if (IS_ERR(rdev)) {
-			dev_err(&pdev->dev, "Failed to register  %d regulator\n", i);
+			dev_dbg(&pdev->dev, "Failed to register  %d regulator\n", i);
 			return PTR_ERR(rdev);
 		}
 
 		ret = mt6360_regulator_irq_register(pdev, rdev, rdesc->irq_tables,
 						    rdesc->irq_table_size);
 		if (ret) {
-			dev_err(&pdev->dev, "Failed to register  %d regulator irqs\n", i);
+			dev_dbg(&pdev->dev, "Failed to register  %d regulator irqs\n", i);
 			return ret;
 		}
 	}
 
+	pr_info("%s: successfully\n", __func__);
 	return 0;
+}
+
+static void mt6360_regulator_shutdown(struct platform_device *pdev)
+{
+	struct mt6360_regulator_data *mrd = platform_get_drvdata(pdev);
+
+	regmap_bulk_write(mrd->regmap, MT6360_REG_BUCK1_SEQOFFDLY,
+			  mrd->pwr_off_seq, MT6360_NUMS_OF_PWROFF_CHAN);
 }
 
 static const struct platform_device_id mt6360_regulator_id_table[] = {
@@ -454,13 +521,13 @@ MODULE_DEVICE_TABLE(platform, mt6360_regulator_id_table);
 static struct platform_driver mt6360_regulator_driver = {
 	.driver = {
 		.name = "mt6360-regulator",
-		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = mt6360_regulator_probe,
+	.shutdown = mt6360_regulator_shutdown,
 	.id_table = mt6360_regulator_id_table,
 };
 module_platform_driver(mt6360_regulator_driver);
 
 MODULE_AUTHOR("Gene Chen <gene_chen@richtek.com>");
 MODULE_DESCRIPTION("MT6360 Regulator Driver");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");

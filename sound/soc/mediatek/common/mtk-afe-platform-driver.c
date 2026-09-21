@@ -77,6 +77,27 @@ int mtk_afe_add_sub_dai_control(struct snd_soc_component *component)
 }
 EXPORT_SYMBOL_GPL(mtk_afe_add_sub_dai_control);
 
+unsigned long long word_size_align(unsigned long long in_size)
+{
+	unsigned long long align_size;
+
+	/* MTK memif access need 16 bytes alignment */
+	align_size = in_size & 0xFFFFFFFFF0;
+
+	return align_size;
+}
+EXPORT_SYMBOL_GPL(word_size_align);
+
+int mtk_afe_pcm_open(struct snd_soc_component *component,
+		     struct snd_pcm_substream *substream)
+{
+	/* set the wait_for_avail to 2 sec*/
+	substream->wait_time = msecs_to_jiffies(2 * 1000);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_afe_pcm_open);
+
 snd_pcm_uframes_t mtk_afe_pcm_pointer(struct snd_soc_component *component,
 				      struct snd_pcm_substream *substream)
 {
@@ -86,31 +107,137 @@ snd_pcm_uframes_t mtk_afe_pcm_pointer(struct snd_soc_component *component,
 	const struct mtk_base_memif_data *memif_data = memif->data;
 	struct regmap *regmap = afe->regmap;
 	struct device *dev = afe->dev;
-	int reg_ofs_base = memif_data->reg_ofs_base;
-	int reg_ofs_cur = memif_data->reg_ofs_cur;
-	unsigned int hw_ptr = 0, hw_base = 0;
-	int ret, pcm_ptr_bytes;
+	unsigned int hw_ptr_lower32 = 0, hw_ptr_upper32 = 0;
+	unsigned int hw_base_lower32 = 0, hw_base_upper32 = 0;
+	unsigned long long hw_ptr = 0, hw_base = 0;
+	int ret;
+	unsigned long long pcm_ptr_bytes = 0;
 
-	ret = regmap_read(regmap, reg_ofs_cur, &hw_ptr);
-	if (ret || hw_ptr == 0) {
-		dev_err(dev, "%s hw_ptr err\n", __func__);
+	ret = regmap_read(regmap, memif_data->reg_ofs_cur, &hw_ptr_lower32);
+	if (ret || hw_ptr_lower32 == 0) {
+		dev_err(dev, "%s hw_ptr_lower32 err\n", __func__);
 		pcm_ptr_bytes = 0;
 		goto POINTER_RETURN_FRAMES;
 	}
 
-	ret = regmap_read(regmap, reg_ofs_base, &hw_base);
-	if (ret || hw_base == 0) {
-		dev_err(dev, "%s hw_ptr err\n", __func__);
+	if (memif_data->reg_ofs_cur_msb) {
+		ret = regmap_read(regmap, memif_data->reg_ofs_cur_msb, &hw_ptr_upper32);
+		if (ret) {
+			dev_err(dev, "%s hw_ptr_upper32 err\n", __func__);
+			pcm_ptr_bytes = 0;
+			goto POINTER_RETURN_FRAMES;
+		}
+	}
+
+	ret = regmap_read(regmap, memif_data->reg_ofs_base, &hw_base_lower32);
+	if (ret || hw_base_lower32 == 0) {
+		dev_err(dev, "%s hw_base_lower32 err\n", __func__);
 		pcm_ptr_bytes = 0;
 		goto POINTER_RETURN_FRAMES;
 	}
+	if (memif_data->reg_ofs_base_msb) {
+		ret = regmap_read(regmap, memif_data->reg_ofs_base_msb, &hw_base_upper32);
+		if (ret) {
+			dev_err(dev, "%s hw_base_upper32 err\n", __func__);
+			pcm_ptr_bytes = 0;
+			goto POINTER_RETURN_FRAMES;
+		}
+	}
+	hw_ptr = hw_ptr_upper32;
+	hw_base = hw_base_upper32;
+	hw_ptr = (hw_ptr << 32) + hw_ptr_lower32;
+	hw_base = (hw_base << 32) + hw_base_lower32;
 
 	pcm_ptr_bytes = hw_ptr - hw_base;
 
 POINTER_RETURN_FRAMES:
-	return bytes_to_frames(substream->runtime, pcm_ptr_bytes);
+	pcm_ptr_bytes = word_size_align(pcm_ptr_bytes);
+	return bytes_to_frames(substream->runtime, (unsigned long)pcm_ptr_bytes);
 }
 EXPORT_SYMBOL_GPL(mtk_afe_pcm_pointer);
+
+/* calculate the target DMA-buffer position to be written/read */
+static void *get_dma_ptr(struct snd_pcm_runtime *runtime,
+			   int channel, unsigned long hwoff)
+{
+	return runtime->dma_area + hwoff +
+		channel * (runtime->dma_bytes / runtime->channels);
+}
+
+/* default copy_user ops for write; used for both interleaved and non- modes */
+static int default_write_copy(struct snd_pcm_substream *substream,
+			      int channel, unsigned long hwoff,
+			      struct iov_iter *iter, unsigned long bytes)
+{
+	if (copy_from_iter(get_dma_ptr(substream->runtime, channel, hwoff),
+			   bytes, iter) != bytes)
+		return -EFAULT;
+	return 0;
+}
+
+/* default copy_user ops for read; used for both interleaved and non- modes */
+static int default_read_copy(struct snd_pcm_substream *substream,
+			     int channel, unsigned long hwoff,
+			     struct iov_iter *iter, unsigned long bytes)
+{
+	if (copy_to_iter(get_dma_ptr(substream->runtime, channel, hwoff),
+			 bytes, iter) != bytes)
+		return -EFAULT;
+	return 0;
+}
+
+int mtk_afe_pcm_copy_user(struct snd_soc_component *component,
+			  struct snd_pcm_substream *substream,
+			  int channel, unsigned long hwoff,
+			  struct iov_iter *buf, unsigned long bytes)
+{
+	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(component);
+	int is_playback = substream->stream == SNDRV_PCM_STREAM_PLAYBACK;
+	mtk_sp_copy_f sp_copy;
+	int ret;
+
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	int memif_num = cpu_dai->id;
+	struct mtk_base_afe_memif *memif = &afe->memif[memif_num];
+
+	sp_copy = is_playback ? default_write_copy : default_read_copy;
+
+	if (afe->copy && !(memif->fast_palyback == 1)) {
+		ret = afe->copy(substream, channel, hwoff,
+				buf, bytes, sp_copy);
+		if (ret)
+			return -EFAULT;
+	} else {
+		sp_copy(substream, channel, hwoff,
+			buf, bytes);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_afe_pcm_copy_user);
+
+int mtk_afe_pcm_ack(struct snd_pcm_substream *substream)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_component *component =
+		snd_soc_rtdcom_lookup(rtd, AFE_PCM_NAME);
+	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(component);
+	struct snd_soc_dai *cpu_dai = asoc_rtd_to_cpu(rtd, 0);
+	struct mtk_base_afe_memif *memif = &afe->memif[cpu_dai->id];
+
+	if (!memif->ack_enable)
+		return 0;
+
+	if (memif->ack)
+		memif->ack(substream);
+	else
+		dev_warn(afe->dev, "%s(), ack_enable but ack == NULL\n",
+			 __func__);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(mtk_afe_pcm_ack);
 
 int mtk_afe_pcm_new(struct snd_soc_component *component,
 		    struct snd_soc_pcm_runtime *rtd)
@@ -120,18 +247,27 @@ int mtk_afe_pcm_new(struct snd_soc_component *component,
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(component);
 
 	size = afe->mtk_afe_hardware->buffer_bytes_max;
-	snd_pcm_set_managed_buffer_all(pcm, SNDRV_DMA_TYPE_DEV, afe->dev,
-				       afe->preallocate_buffers ? size : 0,
-				       size);
+	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV,
+					      afe->dev, size, size);
+
+	rtd->ops.ack = mtk_afe_pcm_ack;
+	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_PLAYBACK, &rtd->ops);
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mtk_afe_pcm_new);
 
+void mtk_afe_pcm_free(struct snd_soc_component *component, struct snd_pcm *pcm)
+{
+	snd_pcm_lib_preallocate_free_for_all(pcm);
+}
+EXPORT_SYMBOL_GPL(mtk_afe_pcm_free);
+
 const struct snd_soc_component_driver mtk_afe_pcm_platform = {
 	.name		= AFE_PCM_NAME,
 	.pointer	= mtk_afe_pcm_pointer,
 	.pcm_construct	= mtk_afe_pcm_new,
+	.pcm_destruct	= mtk_afe_pcm_free,
 };
 EXPORT_SYMBOL_GPL(mtk_afe_pcm_platform);
 

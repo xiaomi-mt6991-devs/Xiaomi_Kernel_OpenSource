@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
+ * Copyright (c) 2024 MediaTek Inc.
  * virtio-snd: Virtio sound device
  * Copyright (C) 2022 OpenSynergy GmbH
  */
@@ -35,6 +36,15 @@ static const unsigned int g_v2a_mask_map[] = {
 	[VIRTIO_SND_CTL_EVT_MASK_INFO] = SNDRV_CTL_EVENT_MASK_INFO,
 	[VIRTIO_SND_CTL_EVT_MASK_TLV] = SNDRV_CTL_EVENT_MASK_TLV
 };
+#if defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
+struct virtsnd_sram_reg_control{
+	struct virtio_snd *snd;
+	enum mtk_audio_sram_mode sram_mode;
+	struct work_struct sram_reg_control;
+	int result;
+};
+#endif
+
 
 /**
  * virtsnd_kctl_info() - Returns information about the control.
@@ -76,14 +86,15 @@ static int virtsnd_kctl_info(struct snd_kcontrol *kcontrol,
 
 		break;
 	case SNDRV_CTL_ELEM_TYPE_ENUMERATED:
-		uinfo->value.enumerated.items =
-			le32_to_cpu(kinfo->value.enumerated.items);
 		i = uinfo->value.enumerated.item;
-		if (i >= uinfo->value.enumerated.items)
+		if (i >= le32_to_cpu(kinfo->value.enumerated.items))
 			return -EINVAL;
 
+		uinfo->value.enumerated.items = kinfo->value.enumerated.items;
 		strscpy(uinfo->value.enumerated.name, kctl->items[i].item,
 			sizeof(uinfo->value.enumerated.name));
+
+		uinfo->value.enumerated.names_ptr = (__u64)kctl->items;
 
 		break;
 	}
@@ -129,8 +140,7 @@ static int virtsnd_kctl_get(struct snd_kcontrol *kcontrol,
 	if (rc)
 		goto on_failure;
 
-	kvalue = (void *)((u8 *)virtsnd_ctl_msg_response(msg) +
-			  sizeof(struct virtio_snd_hdr));
+	kvalue = (void *)((u8 *)virtsnd_ctl_msg_response(msg) +  sizeof(struct virtio_snd_hdr));
 
 	switch (type) {
 	case VIRTIO_SND_CTL_TYPE_BOOLEAN:
@@ -175,7 +185,7 @@ on_failure:
 static int virtsnd_kctl_put(struct snd_kcontrol *kcontrol,
 			    struct snd_ctl_elem_value *uvalue)
 {
-	struct virtio_snd *snd = kcontrol->private_data;
+	struct virtio_snd *snd = (struct virtio_snd *)kcontrol->private_data;
 	struct virtio_snd_ctl_info *kinfo =
 		&snd->kctl_infos[kcontrol->private_value];
 	unsigned int type = le32_to_cpu(kinfo->type);
@@ -239,7 +249,7 @@ static int virtsnd_kctl_put(struct snd_kcontrol *kcontrol,
 static int virtsnd_kctl_tlv_op(struct snd_kcontrol *kcontrol, int op_flag,
 			       unsigned int size, unsigned int __user *utlv)
 {
-	struct virtio_snd *snd = kcontrol->private_data;
+	struct virtio_snd *snd = (struct virtio_snd *)kcontrol->private_data;
 	struct virtio_snd_msg *msg;
 	struct virtio_snd_ctl_hdr *hdr;
 	unsigned int *tlv;
@@ -253,8 +263,8 @@ static int virtsnd_kctl_tlv_op(struct snd_kcontrol *kcontrol, int op_flag,
 
 	tlv = kzalloc(size, GFP_KERNEL);
 	if (!tlv) {
-		rc = -ENOMEM;
-		goto on_msg_unref;
+		virtsnd_ctl_msg_unref(msg);
+		return -ENOMEM;
 	}
 
 	sg_init_one(&sg, tlv, size);
@@ -281,25 +291,14 @@ static int virtsnd_kctl_tlv_op(struct snd_kcontrol *kcontrol, int op_flag,
 			hdr->hdr.code =
 				cpu_to_le32(VIRTIO_SND_R_CTL_TLV_COMMAND);
 
-		if (copy_from_user(tlv, utlv, size)) {
+		if (copy_from_user(tlv, utlv, size))
 			rc = -EFAULT;
-			goto on_msg_unref;
-		} else {
+		else
 			rc = virtsnd_ctl_msg_send(snd, msg, &sg, NULL, false);
-		}
 
 		break;
-	default:
-		rc = -EINVAL;
-		/* We never get here - we listed all values for op_flag */
-		WARN_ON(1);
-		goto on_msg_unref;
 	}
-	kfree(tlv);
-	return rc;
 
-on_msg_unref:
-	virtsnd_ctl_msg_unref(msg);
 	kfree(tlv);
 
 	return rc;
@@ -324,26 +323,43 @@ static int virtsnd_kctl_get_enum_items(struct virtio_snd *snd, unsigned int cid)
 	struct virtio_snd_ctl_hdr *hdr;
 	unsigned int n = le32_to_cpu(kinfo->value.enumerated.items);
 	struct scatterlist sg;
+	int rc;
+	struct virtio_snd_ctl_enum_item *values;
 
 	msg = virtsnd_ctl_msg_alloc(sizeof(*hdr),
 				    sizeof(struct virtio_snd_hdr), GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
-	kctl->items = devm_kcalloc(&vdev->dev, n, sizeof(*kctl->items),
+	// kctl->items = devm_kcalloc(&vdev->dev, n, sizeof(*kctl->items),
+	//			   GFP_KERNEL);
+	values = devm_kcalloc(&vdev->dev, n, sizeof(*values),
 				   GFP_KERNEL);
-	if (!kctl->items) {
+	//asset 超过4k
+	if (!values) {
 		virtsnd_ctl_msg_unref(msg);
 		return -ENOMEM;
 	}
 
-	sg_init_one(&sg, kctl->items, n * sizeof(*kctl->items));
+	sg_init_one(&sg, values, n * sizeof(*values));
 
 	hdr = virtsnd_ctl_msg_request(msg);
 	hdr->hdr.code = cpu_to_le32(VIRTIO_SND_R_CTL_ENUM_ITEMS);
 	hdr->control_id = cpu_to_le32(cid);
 
-	return virtsnd_ctl_msg_send(snd, msg, NULL, &sg, false);
+	rc = virtsnd_ctl_msg_send(snd, msg, NULL, &sg, false);
+
+	if (rc){
+		dev_info(&vdev->dev,
+			 "Failed to query enumerated information: %d\n",
+			 rc);
+		devm_kfree(&vdev->dev, values);
+		return rc;
+	}
+
+	kctl->items = values;
+
+	return rc;
 }
 
 /**
@@ -363,6 +379,7 @@ int virtsnd_kctl_parse_cfg(struct virtio_snd *snd)
 
 	virtio_cread_le(vdev, struct virtio_snd_config, controls,
 			&snd->nkctls);
+
 	if (!snd->nkctls)
 		return 0;
 
@@ -380,7 +397,6 @@ int virtsnd_kctl_parse_cfg(struct virtio_snd *snd)
 				    sizeof(*snd->kctl_infos), snd->kctl_infos);
 	if (rc)
 		return rc;
-
 	for (i = 0; i < snd->nkctls; ++i) {
 		struct virtio_snd_ctl_info *kinfo = &snd->kctl_infos[i];
 		unsigned int type = le32_to_cpu(kinfo->type);
@@ -391,6 +407,9 @@ int virtsnd_kctl_parse_cfg(struct virtio_snd *snd)
 				return rc;
 		}
 	}
+
+	// TODO add sram_size kcontrol
+	// TODO add aaudio_ion
 
 	return 0;
 }
@@ -475,3 +494,173 @@ void virtsnd_kctl_event(struct virtio_snd *snd, struct virtio_snd_event *event)
 
 	snd_ctl_notify(snd->card, mask, &kctl->kctl->id);
 }
+
+#if defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
+/**
+ * virtsnd_kctl_find_by_name() - Find control by name.
+ * @snd: VirtIO sound device.
+ * @name: control name.
+ * @out: ptr to receive virtio control ptr.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+int virtsnd_kctl_find_by_name(struct virtio_snd *snd, const char *name,
+		struct virtio_kctl **out)
+{
+	int rc = -ENOENT;
+	int i;
+
+	for (i = 0; i < snd->nkctls; ++i) {
+		if (strcmp(snd->kctl_infos[i].name, name) == 0) {
+			*out = &snd->kctls[i];
+			rc = 0;
+			break;
+		}
+	}
+
+	return rc;
+}
+
+int virtsnd_info_find_by_name(struct virtio_snd *snd, const char *name,
+		struct virtio_snd_ctl_info **out)
+{
+	int rc = -ENOENT;
+	int i;
+
+	for (i = 0; i < snd->nkctls; ++i) {
+		if (strcmp(snd->kctl_infos[i].name, name) == 0) {
+			*out = &snd->kctl_infos[i];
+			rc = i;
+			break;
+		}
+	}
+
+	return rc;
+}
+
+int virtsnd_kctl_get_use_dram_only(struct virtio_snd *snd, int pcm_id)
+{
+	int rc;
+	struct snd_ctl_elem_value *kval;
+
+	kval = kmalloc(sizeof(*kval), GFP_KERNEL);
+	if (!kval)
+		return -ENOMEM;
+	rc = virtsnd_kctl_get(snd->remote_use_dram_only_ctl->kctl, kval);
+	if (rc) {
+		dev_info(&snd->vdev->dev, "get remote use_dram_only failed: %d\n", rc);
+		kfree(kval);
+		rc = -EIO;
+	} else {
+		rc = kval->value.bytes.data[pcm_id];
+	}
+	kfree(kval);
+	return rc;
+}
+
+int virtsnd_kctl_reg_shm(struct virtio_snd *snd, int pcm_id,
+		dma_addr_t dma_area, size_t bytes, int sram)
+{
+	int rc;
+	struct virtio_snd_ctl_info *kinfo;
+	unsigned int type;
+	unsigned int count;
+	struct virtio_snd_msg *msg;
+	struct virtio_snd_ctl_hdr *hdr;
+	struct virtio_snd_ctl_value *kvalue;
+	struct virtio_passthrough_shm_msg *shm;
+	size_t request_size = sizeof(*hdr) + sizeof(*kvalue);
+	size_t response_size = sizeof(struct virtio_snd_hdr);
+
+	rc = virtsnd_info_find_by_name(snd, "passthrough_shm",
+			&kinfo);
+	if (rc < 0){
+		dev_info(&snd->vdev->dev, "get passthrough_shm info failed: %d\n", rc);
+		return rc;
+	}
+
+	type = le32_to_cpu(kinfo->type);
+	count = le32_to_cpu(kinfo->count);
+
+	msg = virtsnd_ctl_msg_alloc(request_size, response_size, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = virtsnd_ctl_msg_request(msg);
+	hdr->hdr.code = cpu_to_le32(VIRTIO_SND_R_CTL_WRITE);
+	hdr->control_id = cpu_to_le32(kinfo->index);
+	kvalue = (void *)((u8 *)hdr + sizeof(*hdr));
+	shm = (struct virtio_passthrough_shm_msg *) kvalue->value.bytes;
+	shm->cmd = sram ?
+			VIRTIO_PASSTHROUGH_SHM_CMD_REG_SRAM
+			: VIRTIO_PASSTHROUGH_SHM_CMD_REG_DRAM;
+	shm->pcm_id = pcm_id;
+	shm->pa = dma_area;
+	shm->bytes = bytes;
+
+	rc = virtsnd_ctl_msg_send_sync(snd, msg);
+	return rc;
+}
+
+int virtsnd_kctl_unreg_shm(struct virtio_snd *snd, int pcm_id, int sram)
+{
+	int rc;
+
+	struct virtio_snd_ctl_info *kinfo;
+	unsigned int type;
+	unsigned int count;
+	struct virtio_snd_msg *msg;
+	struct virtio_snd_ctl_hdr *hdr;
+	struct virtio_snd_ctl_value *kvalue;
+	struct virtio_passthrough_shm_msg *shm;
+	size_t request_size = sizeof(*hdr) + sizeof(*kvalue);
+	size_t response_size = sizeof(struct virtio_snd_hdr);
+
+	rc = virtsnd_info_find_by_name(snd, "passthrough_shm",
+			&kinfo);
+	if (rc < 0){
+		dev_info(&snd->vdev->dev, "get passthrough_shm info failed: %d\n", rc);
+		return rc;
+	}
+
+	type = le32_to_cpu(kinfo->type);
+	count = le32_to_cpu(kinfo->count);
+
+	msg = virtsnd_ctl_msg_alloc(request_size, response_size, GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	hdr = virtsnd_ctl_msg_request(msg);
+	hdr->hdr.code = cpu_to_le32(VIRTIO_SND_R_CTL_WRITE);
+	hdr->control_id = cpu_to_le32(kinfo->index);
+	kvalue = (void *)((u8 *)hdr + sizeof(*hdr));
+
+	shm = (struct virtio_passthrough_shm_msg *) kvalue->value.bytes;
+	shm->cmd = sram ?
+			VIRTIO_PASSTHROUGH_SHM_CMD_UNREG_SRAM
+			: VIRTIO_PASSTHROUGH_SHM_CMD_UNREG_DRAM;
+	shm->pcm_id = pcm_id;
+	shm->pa = 0;
+	shm->bytes = 0;
+	rc = virtsnd_ctl_msg_send_sync(snd, msg);
+	return rc;
+}
+
+int virtio_set_sram_mode(struct device *dev,
+				enum mtk_audio_sram_mode sram_mode)
+{
+
+	int rc = 0;
+	struct virtio_device *vdev = dev_to_virtio(dev);
+	struct virtio_snd *snd = vdev->priv;
+
+	snd->sram_mode = sram_mode;
+	snd->result = -ENOMEM;
+
+
+	schedule_work(&snd->sram_reg_control);
+	rc = snd->result;
+
+	return rc;
+}
+#endif

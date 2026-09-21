@@ -62,3 +62,7 @@ obj-$(CONFIG_SPRD_MBOX)		+= sprd-mailbox.o
 obj-$(CONFIG_QCOM_IPCC)		+= qcom-ipcc.o
 
 obj-$(CONFIG_APPLE_MAILBOX)	+= apple-mailbox.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MTK_TINYSYS_MBOX)    += mtk-mbox-mailbox.o
+obj-$(CONFIG_MTK_ISE_MBOX)	+= mtk-ise-mailbox.o

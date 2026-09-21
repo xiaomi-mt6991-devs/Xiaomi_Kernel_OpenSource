@@ -2432,3 +2432,11 @@ endmenu # "CPU Power Management"
 source "drivers/acpi/Kconfig"
 
 source "arch/arm64/kvm/Kconfig"
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MTK_DCACHE_INVAL
+	tristate "export DCACHE_INVAL API"
+	help
+	  MTK_DCACHE_INVAL is the kernel config of export API.
+	  Fix dma cache issue.
+

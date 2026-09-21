@@ -17,3 +17,8 @@ $(obj)/pkvm/kvm_nvhe.o: FORCE
 
 arm_smmu_v3_kvm-objs += pkvm/kvm_nvhe.o
 endif
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MTK_SMMU_V3_PMU) += mtk-smmuv3-pmu.o
+obj-$(CONFIG_MTK_SMMU_V3_LMU) += mtk-smmuv3-lmu.o
+obj-$(CONFIG_MTK_SMMU_V3_MPAM_MON) += mtk-smmuv3-mpam-mon.o

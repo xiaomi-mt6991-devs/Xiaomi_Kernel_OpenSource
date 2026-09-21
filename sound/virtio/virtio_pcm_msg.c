@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
+ * Copyright (c) 2024 MediaTek Inc.
  * virtio-snd: Virtio sound device
  * Copyright (C) 2021 OpenSynergy GmbH
  */
@@ -36,6 +37,7 @@ enum pcm_msg_sg_index {
 	PCM_MSG_SG_DATA
 };
 
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 /**
  * virtsnd_pcm_sg_num() - Count the number of sg-elements required to represent
  *                        vmalloc'ed buffer.
@@ -74,6 +76,7 @@ static int virtsnd_pcm_sg_num(u8 *data, unsigned int length)
 
 	return num;
 }
+
 
 /**
  * virtsnd_pcm_sg_from() - Build sg-list from vmalloc'ed buffer.
@@ -116,6 +119,7 @@ static void virtsnd_pcm_sg_from(struct scatterlist *sgs, int nsgs, u8 *data,
 
 	sg_mark_end(&sgs[idx]);
 }
+#endif
 
 /**
  * virtsnd_pcm_msg_alloc() - Allocate I/O messages.
@@ -132,21 +136,26 @@ static void virtsnd_pcm_sg_from(struct scatterlist *sgs, int nsgs, u8 *data,
 int virtsnd_pcm_msg_alloc(struct virtio_pcm_substream *vss,
 			  unsigned int periods, unsigned int period_bytes)
 {
-	struct snd_pcm_runtime *runtime = vss->substream->runtime;
+	//struct snd_pcm_runtime *runtime = vss->substream->runtime;
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 	unsigned int i;
+	struct snd_pcm_runtime *runtime = vss->substream->runtime;
 
 	vss->msgs = kcalloc(periods, sizeof(*vss->msgs), GFP_KERNEL);
 	if (!vss->msgs)
 		return -ENOMEM;
+#endif
 
 	vss->nmsgs = periods;
 
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 	for (i = 0; i < periods; ++i) {
 		u8 *data = runtime->dma_area + period_bytes * i;
 		int sg_num = virtsnd_pcm_sg_num(data, period_bytes);
 		struct virtio_pcm_msg *msg;
 
-		msg = kzalloc(struct_size(msg, sgs, sg_num + 2), GFP_KERNEL);
+		msg = kzalloc(sizeof(*msg) + sizeof(*msg->sgs) * (sg_num + 2),
+			      GFP_KERNEL);
 		if (!msg)
 			return -ENOMEM;
 
@@ -155,11 +164,13 @@ int virtsnd_pcm_msg_alloc(struct virtio_pcm_substream *vss,
 			    sizeof(msg->xfer));
 		sg_init_one(&msg->sgs[PCM_MSG_SG_STATUS], &msg->status,
 			    sizeof(msg->status));
+		msg->length = period_bytes;
 		virtsnd_pcm_sg_from(&msg->sgs[PCM_MSG_SG_DATA], sg_num, data,
 				    period_bytes);
 
 		vss->msgs[i] = msg;
 	}
+#endif
 
 	return 0;
 }
@@ -172,12 +183,13 @@ int virtsnd_pcm_msg_alloc(struct virtio_pcm_substream *vss,
  */
 void virtsnd_pcm_msg_free(struct virtio_pcm_substream *vss)
 {
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 	unsigned int i;
 
 	for (i = 0; vss->msgs && i < vss->nmsgs; ++i)
 		kfree(vss->msgs[i]);
 	kfree(vss->msgs);
-
+#endif
 	vss->msgs = NULL;
 	vss->nmsgs = 0;
 }
@@ -185,81 +197,72 @@ void virtsnd_pcm_msg_free(struct virtio_pcm_substream *vss)
 /**
  * virtsnd_pcm_msg_send() - Send asynchronous I/O messages.
  * @vss: VirtIO PCM substream.
- * @offset: starting position that has been updated
- * @bytes: number of bytes that has been updated
  *
  * All messages are organized in an ordered circular list. Each time the
  * function is called, all currently non-enqueued messages are added to the
- * virtqueue. For this, the function uses offset and bytes to calculate the
- * messages that need to be added.
+ * virtqueue. For this, the function keeps track of two values:
+ *
+ *   msg_last_enqueued = index of the last enqueued message,
+ *   msg_count = # of pending messages in the virtqueue.
  *
  * Context: Any context. Expects the tx/rx queue and the VirtIO substream
  *          spinlocks to be held by caller.
  * Return: 0 on success, -errno on failure.
  */
-int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss, unsigned long offset,
-			 unsigned long bytes)
+int virtsnd_pcm_msg_send(struct virtio_pcm_substream *vss)
 {
+	struct snd_pcm_runtime *runtime = vss->substream->runtime;
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 	struct virtio_snd *snd = vss->snd;
 	struct virtio_device *vdev = snd->vdev;
 	struct virtqueue *vqueue = virtsnd_pcm_queue(vss)->vqueue;
-	unsigned long period_bytes = snd_pcm_lib_period_bytes(vss->substream);
-	unsigned long start, end, i;
-	unsigned int msg_count = vss->msg_count;
+#endif
+	int i;
+	int n;
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 	bool notify = false;
-	int rc;
+#endif
+	i = (vss->msg_last_enqueued + 1) % runtime->periods;
+	n = runtime->periods - vss->msg_count;
 
-	start = offset / period_bytes;
-	end = (offset + bytes - 1) / period_bytes;
-
-	for (i = start; i <= end; i++) {
+	for (; n; --n, i = (i + 1) % runtime->periods) {
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 		struct virtio_pcm_msg *msg = vss->msgs[i];
 		struct scatterlist *psgs[] = {
 			&msg->sgs[PCM_MSG_SG_XFER],
 			&msg->sgs[PCM_MSG_SG_DATA],
 			&msg->sgs[PCM_MSG_SG_STATUS]
 		};
-		unsigned long n;
+		int rc;
 
-		n = period_bytes - (offset % period_bytes);
-		if (n > bytes)
-			n = bytes;
+		msg->xfer.stream_id = cpu_to_le32(vss->sid);
+		memset(&msg->status, 0, sizeof(msg->status));
 
-		msg->length += n;
-		if (msg->length == period_bytes) {
-			msg->xfer.stream_id = cpu_to_le32(vss->sid);
-			memset(&msg->status, 0, sizeof(msg->status));
+		if (vss->direction == SNDRV_PCM_STREAM_PLAYBACK)
+			rc = virtqueue_add_sgs(vqueue, psgs, 2, 1, msg,
+					       GFP_ATOMIC);
+		else
+			rc = virtqueue_add_sgs(vqueue, psgs, 1, 2, msg,
+					       GFP_ATOMIC);
 
-			if (vss->direction == SNDRV_PCM_STREAM_PLAYBACK)
-				rc = virtqueue_add_sgs(vqueue, psgs, 2, 1, msg,
-						       GFP_ATOMIC);
-			else
-				rc = virtqueue_add_sgs(vqueue, psgs, 1, 2, msg,
-						       GFP_ATOMIC);
-
-			if (rc) {
-				dev_err(&vdev->dev,
-					"SID %u: failed to send I/O message\n",
-					vss->sid);
-				return rc;
-			}
-
-			vss->msg_count++;
+		if (rc) {
+			dev_info(&vdev->dev,
+				"SID %u: failed to send I/O message\n",
+				vss->sid);
+			return rc;
 		}
-
-		offset = 0;
-		bytes -= n;
+#endif
+		vss->msg_last_enqueued = i;
+		vss->msg_count++;
 	}
 
-	if (msg_count == vss->msg_count)
-		return 0;
-
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 	if (!(vss->features & (1U << VIRTIO_SND_PCM_F_MSG_POLLING)))
 		notify = virtqueue_kick_prepare(vqueue);
 
 	if (notify)
 		virtqueue_notify(vqueue);
-
+#endif
 	return 0;
 }
 
@@ -322,8 +325,6 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 	if (vss->hw_ptr >= vss->buffer_bytes)
 		vss->hw_ptr -= vss->buffer_bytes;
 
-	msg->length = 0;
-
 	vss->xfer_xrun = false;
 	vss->msg_count--;
 
@@ -333,8 +334,11 @@ static void virtsnd_pcm_msg_complete(struct virtio_pcm_msg *msg,
 		runtime->delay =
 			bytes_to_frames(runtime,
 					le32_to_cpu(msg->status.latency_bytes));
-
+#if !defined(CONFIG_SND_VIRTIO_MTK_PASSTHROUGH)
 		schedule_work(&vss->elapsed_period);
+
+		virtsnd_pcm_msg_send(vss);
+#endif
 	} else if (!vss->msg_count) {
 		wake_up_all(&vss->msg_empty);
 	}

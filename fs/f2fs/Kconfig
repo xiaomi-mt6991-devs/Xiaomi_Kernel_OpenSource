@@ -151,3 +151,10 @@ config F2FS_UNFAIR_RWSEM
 	help
 	  Use unfair rw_semaphore, if system configured IO priority by block
 	  cgroup.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MTK_F2FS_DEBUG
+	bool "mtk F2FS debug patch for userdebug and eng load"
+	help
+	  mtk F2FS debug patch for userdebug and eng load
+

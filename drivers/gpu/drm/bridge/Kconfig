@@ -396,3 +396,17 @@ source "drivers/gpu/drm/bridge/imx/Kconfig"
 source "drivers/gpu/drm/bridge/synopsys/Kconfig"
 
 endmenu
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config DRM_SERDES_DP
+	tristate "DRM Serdes DP Support for Platform SoCs"
+	depends on OF
+	select SERDES_DP
+	help
+	  Enable support for the Serdes-based DisplayPort (DP) interface
+	  on Mediatek SoCs. This driver provides the necessary functionality
+	  to initialize and manage the Serdes hardware that handles the
+	  high-speed data lanes used for DisplayPort connections on these
+	  platforms. Enabling this option will allow the DRM subsystem to
+	  communicate with DisplayPort devices via the Serdes interface.
+

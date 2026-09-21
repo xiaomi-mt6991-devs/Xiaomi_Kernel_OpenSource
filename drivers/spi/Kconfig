@@ -1256,3 +1256,12 @@ config SPI_DYNAMIC
 	def_bool ACPI || OF_DYNAMIC || SPI_SLAVE
 
 endif # SPI
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config XIAOMI_FINGERPRINT_SPI_NUM
+	int "xiaomi fingerprint spi num"
+	default 1
+	help
+	  xiaomi fingerprint and mitee
+
+

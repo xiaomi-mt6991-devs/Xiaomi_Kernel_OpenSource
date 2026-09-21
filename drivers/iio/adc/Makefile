@@ -129,3 +129,14 @@ xilinx-xadc-y := xilinx-xadc-core.o xilinx-xadc-events.o
 obj-$(CONFIG_XILINX_XADC) += xilinx-xadc.o
 obj-$(CONFIG_XILINX_AMS) += xilinx-ams.o
 obj-$(CONFIG_SD_ADC_MODULATOR) += sd_adc_modulator.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MEDIATEK_MT6338_AUXADC) += mt6338-auxadc.o
+obj-$(CONFIG_MEDIATEK_MT635X_AUXADC) += mt635x-auxadc.o
+obj-$(CONFIG_MEDIATEK_MT6375_AUXADC) += mt6375-auxadc.o
+obj-$(CONFIG_MEDIATEK_MT6681_AUXADC) += mt6681-auxadc.o
+obj-$(CONFIG_MEDIATEK_SPMI_PMIC_ADC) += mtk-spmi-pmic-adc.o
+obj-$(CONFIG_MEDIATEK_MT6362_ADC) += mt6362-adc.o
+obj-$(CONFIG_MEDIATEK_MT6375_ADC) += mt6375-adc.o
+obj-$(CONFIG_MEDIATEK_MT6379_ADC) += mt6379-adc.o
+obj-$(CONFIG_RT9490_ADC) += rt9490-adc.o

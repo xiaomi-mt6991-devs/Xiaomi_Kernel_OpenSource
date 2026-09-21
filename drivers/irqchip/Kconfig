@@ -681,3 +681,11 @@ config SUNPLUS_SP7021_INTC
 	  the primary controller on C-Chip.
 
 endmenu
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MTK_SYSIRQ
+	tristate "Mediatek interrupt polarity controller"
+	help
+	  Interrupt polarity controller driver to swap polarity for
+	  interrupts for Mediatek mobile chips.
+

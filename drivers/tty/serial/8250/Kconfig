@@ -574,3 +574,12 @@ config SERIAL_OF_PLATFORM
 	  are probed through devicetree, including Open Firmware based
 	  PowerPC systems and embedded systems on architectures using the
 	  flattened device tree format.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MTK_NO_SUPPORT_UARTHUB
+	bool "Mediatek support uarthub"
+	help
+	  This config is used to control whether the project supports uarthub.
+	  The default value is n.If uarthub is not supported, please set this config.
+	  This config is specifically enabled for projects without uarthub.
+

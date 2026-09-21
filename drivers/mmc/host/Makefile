@@ -108,3 +108,9 @@ endif
 
 obj-$(CONFIG_MMC_SDHCI_XENON)	+= sdhci-xenon-driver.o
 sdhci-xenon-driver-y		+= sdhci-xenon.o sdhci-xenon-phy.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MMC_MTK_PRO)		+= mtk-mmc.o
+obj-$(CONFIG_MMC_DEBUG)			+= mtk-mmc-dbg.o
+obj-$(CONFIG_MMC_MTK_MMC_WP)		+= mtk-mmc-wp.o
+obj-$(CONFIG_MMC_MTK_SW_CQHCI)		+= mtk-mmc-swcqhci.o

@@ -39,3 +39,6 @@ $(obj)/ti-emif-asm-offsets.h: $(obj)/emif-asm-offsets.s FORCE
 
 targets += emif-asm-offsets.s
 clean-files += ti-emif-asm-offsets.h
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_MTK_SMI)		+= mtk-smi-mt6771.o

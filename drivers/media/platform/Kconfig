@@ -87,3 +87,32 @@ source "drivers/media/platform/via/Kconfig"
 source "drivers/media/platform/xilinx/Kconfig"
 
 endif # MEDIA_PLATFORM_DRIVERS
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config JPEG_V4L2_DECODE
+	tristate "JPEG V4L2 DECODE driver"
+	help
+	  Mediatek jpeg codec driver provides HW capability to decode
+	  JPEG format
+
+	  To compile this driver as a module, choose y here: the
+	  define will be open
+
+
+config VIDEO_MEDIATEK_VCU
+	tristate "Mediatek VCU driver"
+	help
+	  Mediatek video kernel driver for user space vpud.
+
+	  The driver support communicate with user space video driver vpud
+	  and allocate, free memory, etc.
+
+	  To compile this driver as modules, choose M here: the
+	  modules will be called mtk-vcu.
+
+
+config MTK_CAMSYS_VEND_HOOK
+	bool "Support Mediatek CAMSYS vnedor hook"
+	depends on VIDEO_DEV
+	help
+

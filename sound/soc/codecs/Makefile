@@ -772,3 +772,17 @@ obj-$(CONFIG_SND_SOC_LPASS_TX_MACRO)	+= snd-soc-lpass-tx-macro.o
 
 # Mux
 obj-$(CONFIG_SND_SOC_SIMPLE_MUX)	+= snd-soc-simple-mux.o
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+obj-$(CONFIG_SND_SOC_MT6338)	+= snd-soc-mt6338.o
+obj-$(CONFIG_SND_SOC_MT6338_ACCDET) += mt6338-accdet.o
+obj-$(CONFIG_SND_SOC_MT6357_ACCDET) += mt6357-accdet.o
+obj-$(CONFIG_SND_SOC_MT6358_ACCDET) += mt6358-accdet.o
+obj-$(CONFIG_SND_SOC_MT6359P_ACCDET) += mt6359p-accdet.o
+obj-$(CONFIG_SND_SOC_MT6368)	+= snd-soc-mt6368.o
+obj-$(CONFIG_SND_SOC_MT6368_ACCDET) += mt6368-accdet.o
+obj-$(CONFIG_SND_SOC_MT6681)	+= snd-soc-mt6681.o
+obj-$(CONFIG_SND_SOC_MT6681_ACCDET) += mt6681-accdet.o
+obj-$(CONFIG_SND_SOC_RT5509) 	+= snd-soc-rt5509.o
+obj-$(CONFIG_SND_SOC_MT6366)	+= snd-soc-mt6366.o
+obj-$(CONFIG_SND_SOC_CS40L26)   += snd-soc-cs40l26.o

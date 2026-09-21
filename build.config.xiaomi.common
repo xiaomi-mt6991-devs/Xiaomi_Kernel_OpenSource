@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# dali (Redmi K80 Ultra / MT6991) merged single-tree build config.
+#
+# Sources merged into one kernel tree:
+#   - MiCode/Xiaomi_Kernel_OpenSource   bsp-dali-v-oss  (ACK base, now 6.6.142)
+#   - MiCode/MTK_kernel_device_modules  bsp-dali-v-oss  (MTK vendor drivers/DTS)
+#   - MiCode/MTK_kernel_modules         bsp-dali-v-oss  (relocated in-tree)
+#   - MiCode/kernel_build               bsp-dali-v-oss  (-> ../build)
+#
+# Build from the tree root:
+#   BUILD_CONFIG=kernel/build.config.xiaomi.dali build/build.sh
+
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.common
+. ${ROOT_DIR}/${KERNEL_DIR}/build.config.aarch64
+
+SKIP_MRPROPER=1
+
+# MTK vendor modules are merged in-tree, so the "device modules" tree IS the
+# kernel tree. MTK's Makefiles reference $(DEVICE_MODULES_PATH); 379 files do.
+DEVICE_MODULES_REL_DIR=.
+DEVICE_MODULES_PATH="\$(srctree)"
+
+DEFCONFIG="${DEVICE}_gki_defconfig"
+PLATFORM_DEFCONFIG="vendor/xiaomi_mt6991.config"
+DEVICE_DEFCONFIG="vendor/${DEVICE}.config"
+
+PRE_DEFCONFIG_CMDS="KCONFIG_CONFIG=${ROOT_DIR}/${KERNEL_DIR}/arch/arm64/configs/${DEFCONFIG} ${ROOT_DIR}/${KERNEL_DIR}/scripts/kconfig/merge_config.sh -m -r ${ROOT_DIR}/${KERNEL_DIR}/arch/arm64/configs/gki_defconfig ${ROOT_DIR}/${KERNEL_DIR}/arch/arm64/configs/${PLATFORM_DEFCONFIG} ${ROOT_DIR}/${KERNEL_DIR}/arch/arm64/configs/${DEVICE_DEFCONFIG}"
+POST_DEFCONFIG_CMDS="rm -f ${ROOT_DIR}/${KERNEL_DIR}/arch/arm64/configs/${DEFCONFIG}"
+
+MAKE_GOALS="${MAKE_GOALS}
+mediatek/dali.dtb
+Image.gz
+"
+
+FILES="${FILES}
+arch/arm64/boot/Image.gz
+arch/arm64/boot/dts/mediatek/dali.dtb
+vmlinux
+System.map
+"
+
+GKI_MODULES_LIST=android/gki_aarch64_modules

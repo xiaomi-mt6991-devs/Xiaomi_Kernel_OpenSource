@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (C) 2022 Richtek Technology Corp.
+ * Copyright (c) 2022 Mediatek Inc.
  *
  * Author: ChiYuan Huang <cy_huang@richtek.com>
  */

@@ -1,4 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0 OR MIT */
+/*
+ * Copyright (c) 2020 MediaTek Inc.
+ */
 /*
  *  include/linux/irqchip/irq-st.h
  *

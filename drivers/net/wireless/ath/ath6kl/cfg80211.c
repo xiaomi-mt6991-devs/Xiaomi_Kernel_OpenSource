@@ -1119,7 +1119,7 @@ void ath6kl_cfg80211_ch_switch_notify(struct ath6kl_vif *vif, int freq,
 					NL80211_CHAN_HT20 : NL80211_CHAN_NO_HT);
 
 	mutex_lock(&vif->wdev.mtx);
-	cfg80211_ch_switch_notify(vif->ndev, &chandef, 0, 0);
+	cfg80211_ch_switch_notify(vif->ndev, &chandef, 0);
 	mutex_unlock(&vif->wdev.mtx);
 }
 
@@ -3783,7 +3783,6 @@ struct wireless_dev *ath6kl_interface_add(struct ath6kl *ar, const char *name,
 {
 	struct net_device *ndev;
 	struct ath6kl_vif *vif;
-	u8 addr[ETH_ALEN];
 
 	ndev = alloc_netdev(sizeof(*vif), name, name_assign_type, ether_setup);
 	if (!ndev)
@@ -3806,14 +3805,14 @@ struct wireless_dev *ath6kl_interface_add(struct ath6kl *ar, const char *name,
 	vif->htcap[NL80211_BAND_2GHZ].ht_enable = true;
 	vif->htcap[NL80211_BAND_5GHZ].ht_enable = true;
 
-	ether_addr_copy(addr, ar->mac_addr);
+	memcpy(ndev->dev_addr, ar->mac_addr, ETH_ALEN);
 	if (fw_vif_idx != 0) {
-		addr[0] = (addr[0] ^ (1 << fw_vif_idx)) | 0x2;
+		ndev->dev_addr[0] = (ndev->dev_addr[0] ^ (1 << fw_vif_idx)) |
+				     0x2;
 		if (test_bit(ATH6KL_FW_CAPABILITY_CUSTOM_MAC_ADDR,
 			     ar->fw_capabilities))
-			addr[4] ^= 0x80;
+			ndev->dev_addr[4] ^= 0x80;
 	}
-	eth_hw_addr_set(ndev, addr);
 
 	init_netdev(ndev);
 

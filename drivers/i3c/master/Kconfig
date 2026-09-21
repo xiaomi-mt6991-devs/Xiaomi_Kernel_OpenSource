@@ -57,3 +57,15 @@ config MIPI_I3C_HCI
 
 	  This driver can also be built as a module.  If so, the module will be
 	  called mipi-i3c-hci.
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MTK_I3C_MASTER_MT69XX
+	tristate "MTK I3C master mt69xx driver"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on I3C
+	depends on HAS_IOMEM
+	depends on !(ALPHA || PARISC)
+	help
+	  This selects the Mediatek(R) I3C master bus driver
+	  for MT69XX.
+

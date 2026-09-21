@@ -1986,3 +1986,14 @@ config RTC_DRV_POLARFIRE_SOC
 	  will be called "rtc-mpfs".
 
 endif # RTC_CLASS
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config RTC_DRV_MT6685
+	tristate "Mediatek Real Time Clock driver"
+	depends on MFD_MT6685 || (COMPILE_TEST && IRQ_DOMAIN)
+	help
+	  This selects the Mediatek(R) RTC driver. RTC is part of Mediatek
+	  MT6685. You should enable MT6685 MFD before select
+	  Mediatek(R) RTC driver.
+
+

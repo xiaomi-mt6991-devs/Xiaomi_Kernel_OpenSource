@@ -735,3 +735,14 @@ config GOLDFISH_TIMER
 	  Support for the timer/counter of goldfish-rtc
 
 endmenu
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config MEDIATEK_ERRATUM_690001
+	bool "Workaround for MediaTek MT69XX erratum 690001"
+	depends on ARM_ARCH_TIMER && ARM64
+	help
+	  This option enables a workaround for incomplete implementation
+	  in the MMIO timer on the MediaTek MT69XX SoCs. The workaround
+	  will only be active if mediatek,erratum-690001 property is
+	  found in the timer node.
+

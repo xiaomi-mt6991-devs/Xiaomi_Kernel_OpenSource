@@ -28,3 +28,31 @@ source "drivers/ufs/core/Kconfig"
 source "drivers/ufs/host/Kconfig"
 
 endif
+
+# --- merged from MiCode MTK_kernel_device_modules bsp-dali-v-oss ---
+config SCSI_UFS_MEDIATEK_DBG
+	tristate "Debugging facility for MediaTek UFS platforms"
+	depends on SCSI_UFS_MEDIATEK
+	help
+	  This selects the debugging facility for Mediatek UFS platforms.
+	  Provide UFS command history and connection to MediaTek Block IO
+	  Tracer.
+
+	  Select this if you want to enable above facilities.
+
+
+config MTK_UFS_DEBUG
+	bool "Support Mediatek UFS upstreaming features"
+	depends on SCSI_UFSHCD
+	help
+
+config MTK_UFS_DEBUG_BUILD
+	bool "Support Mediatek UFS facilities in debug build only"
+	depends on SCSI_UFSHCD
+	help
+	  This selects the debugging facility for Mediatek UFS platforms
+	  existed in debug build only.
+
+	  Select this if you want to enable above facilities.
+
+
